@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@nestjs/schedule": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0"
+  }
+}

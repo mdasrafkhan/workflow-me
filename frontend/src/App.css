@@ -1,0 +1,255 @@
+.app {
+  display: flex;
+  height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  color: #1d1d1f;
+}
+
+.sidebar {
+  width: 200px;
+  background: #f5f5f7;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e5e5e7;
+}
+
+.canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #ffffff;
+  position: relative;
+}
+
+.canvas {
+  flex: 1;
+  height: 100%;
+  background: #ffffff;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.canvas.drag-over {
+  background: #f0f8ff;
+  border: 2px dashed #007aff;
+  position: relative;
+}
+
+.canvas.drag-over::before {
+  content: "Drop here";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  font-weight: 500;
+  color: #007aff;
+  z-index: 1000;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.15);
+}
+
+.sidebar-nodes {
+  margin-top: 20px;
+}
+
+.dndnode {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  cursor: grab;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  user-select: none;
+  color: #1d1d1f;
+}
+
+.dndnode:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+}
+
+.dndnode:active {
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+/* Sidebar buttons */
+.sidebar button {
+  background: #007aff;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.sidebar button:hover {
+  background: #0056cc;
+  transform: translateY(-1px);
+}
+
+.sidebar button:active {
+  transform: scale(0.98);
+}
+
+/* Workflow list */
+.sidebar h3 {
+  color: #1d1d1f;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 20px 0 12px 0;
+}
+
+.sidebar .workflow-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #e5e5e7;
+}
+
+.sidebar .workflow-item span {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+  flex-grow: 1;
+}
+
+.sidebar .workflow-item span:hover {
+  color: #007aff;
+}
+
+.sidebar .workflow-item button {
+  background: #ff3b30;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 8px;
+  margin-bottom: 0;
+}
+
+.sidebar .workflow-item button:hover {
+  background: #d70015;
+}
+
+.dndnode.subscriber {
+  color: #1976d2;
+  border: 2px solid transparent;
+}
+
+.dndnode.subscriber:hover {
+  border-color: #1976d2;
+}
+
+.dndnode.operator {
+  color: #d97706;
+  border: 2px solid transparent;
+}
+
+.dndnode.operator:hover {
+  border-color: #d97706;
+}
+
+.dndnode.action {
+  color: #d32f2f;
+  border: 2px solid transparent;
+}
+
+.dndnode.action:hover {
+  border-color: #d32f2f;
+}
+
+.dndnode .icon {
+  margin-right: 10px;
+  font-size: 24px;
+}
+
+.dndnode.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  cursor: grabbing;
+}
+
+/* React Flow node styles */
+.react-flow__node {
+  cursor: grab;
+}
+
+.react-flow__node:active {
+  cursor: grabbing;
+}
+
+.react-flow__handle {
+  cursor: crosshair;
+  border: 2px solid #fff;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.react-flow__handle:hover {
+  background: #555;
+  transform: scale(1.2);
+  border-color: #333;
+}
+
+.react-flow__handle:active {
+  cursor: grabbing;
+}
+
+/* Edge styles */
+.react-flow__edge-path {
+  stroke-width: 3;
+  stroke: #2a8af6;
+  stroke-opacity: 0.8;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 4;
+  stroke: #1e6bb8;
+  stroke-opacity: 1;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 5;
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Connection line styles */
+.react-flow__connection-line {
+  stroke: #2a8af6;
+  stroke-width: 3;
+  stroke-opacity: 0.8;
+}
+
+.react-flow__connection-line:hover {
+  stroke: #1e6bb8;
+  stroke-width: 4;
+  stroke-opacity: 1;
+}

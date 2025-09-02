@@ -1,0 +1,20 @@
+services:
+  frontend:
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - FAST_REFRESH=true
+    volumes:
+      - ../frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    command: npm start
+
+  backend:
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+    volumes:
+      - ../backend:/usr/src/app
+      - /usr/src/app/node_modules
+    command: npm run start:dev

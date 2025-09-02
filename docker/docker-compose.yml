@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: workflow-db
+    environment:
+      POSTGRES_USER: workflow_user
+      POSTGRES_PASSWORD: workflow_password
+      POSTGRES_DB: workflow_db
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - workflow-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: workflow-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: workflow-backend
+    depends_on:
+      - postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: workflow_user
+      POSTGRES_PASSWORD: workflow_password
+      POSTGRES_DB: workflow_db
+      NODE_ENV: development
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../backend:/usr/src/app
+      - /usr/src/app/node_modules
+    networks:
+      - workflow-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  workflow-network:
+    driver: bridge
