@@ -18,170 +18,110 @@ const edgeTypes = {
 };
 
 // Custom node renderer - defined outside component to prevent recreation
-const createNodeTypes = (setSelectedNodeId) => ({
-  subscriber: ({ data, id, selected, ...rest }) => {
-    // Filter out React Flow internal props that shouldn't be passed to DOM
-    const { zIndex, ...domProps } = rest;
-    return (
-      <div
-        {...domProps}
-        style={{
-          padding: 12,
-          borderRadius: 8,
-          background: '#fff',
-          border: '2px solid #1976d2',
-          minWidth: 120,
-          maxWidth: 120,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          boxShadow: '0 2px 8px rgba(25,118,210,0.08)',
-          cursor: 'grab',
-          userSelect: 'none'
-        }}
-        onClick={() => setSelectedNodeId(id)}
-      >
-      <span style={{ fontSize: 24, marginBottom: 4 }}>👤</span>
-      <span style={{ fontWeight: 'bold', fontSize: '14px' }}>Subscriber</span>
+const createNodeTypes = (setSelectedNodeId) => {
+  // Common node style generator
+  const createNodeStyle = (color) => ({
+    padding: 12,
+    borderRadius: 8,
+    background: '#fff',
+    border: `2px solid ${color}`,
+    minWidth: 120,
+    maxWidth: 120,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    boxShadow: `0 2px 8px ${color}20`,
+    cursor: 'grab',
+    userSelect: 'none'
+  });
+
+  // Common handle style generator
+  const createHandleStyle = (color) => ({
+    background: color,
+    width: 12,
+    height: 12,
+    border: '2px solid white',
+    boxShadow: `0 0 0 1px ${color}`
+  });
+
+  // Common node component generator
+  const createNodeComponent = (icon, label, color, data, id, setSelectedNodeId) => (
+    <div
+      style={createNodeStyle(color)}
+      onClick={() => setSelectedNodeId(id)}
+    >
+      <span style={{ fontSize: 24, marginBottom: 4 }}>{icon}</span>
+      <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{label}</span>
       {data.selected && <span style={{ fontSize: '12px', color: '#555', marginTop: 4 }}>{data.selected}</span>}
       <Handle
         type="source"
         position="right"
         id="right"
-        style={{
-          background: '#1976d2',
-          width: 12,
-          height: 12,
-          border: '2px solid white',
-          boxShadow: '0 0 0 1px #1976d2'
-        }}
+        style={createHandleStyle(color)}
         isConnectable={true}
       />
       <Handle
         type="target"
         position="left"
         id="left"
-        style={{
-          background: '#1976d2',
-          width: 12,
-          height: 12,
-          border: '2px solid white',
-          boxShadow: '0 0 0 1px #1976d2'
-        }}
+        style={createHandleStyle(color)}
         isConnectable={true}
       />
     </div>
-    );
-  },
-  operator: ({ data, id, selected, ...rest }) => {
-    // Filter out React Flow internal props that shouldn't be passed to DOM
-    const { zIndex, ...domProps } = rest;
-    return (
-      <div
-        {...domProps}
-        style={{
-          padding: 12,
-          borderRadius: 8,
-          background: '#fff',
-          border: '2px solid #d97706',
-          minWidth: 120,
-          maxWidth: 120,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          boxShadow: '0 2px 8px rgba(217,119,6,0.08)',
-          cursor: 'grab',
-          userSelect: 'none'
-        }}
-        onClick={() => setSelectedNodeId(id)}
-      >
-      <span style={{ fontSize: 24, marginBottom: 4 }}>⚙️</span>
-      <span style={{ fontWeight: 'bold', fontSize: '14px' }}>Operator</span>
-      {data.selected && <span style={{ fontSize: '12px', color: '#555', marginTop: 4 }}>{data.selected}</span>}
-      <Handle
-        type="source"
-        position="right"
-        id="right"
-        style={{
-          background: '#d97706',
-          width: 12,
-          height: 12,
-          border: '2px solid white',
-          boxShadow: '0 0 0 1px #d97706'
-        }}
-        isConnectable={true}
-      />
-      <Handle
-        type="target"
-        position="left"
-        id="left"
-        style={{
-          background: '#d97706',
-          width: 12,
-          height: 12,
-          border: '2px solid white',
-          boxShadow: '0 0 0 1px #d97706'
-        }}
-        isConnectable={true}
-      />
-    </div>
-    );
-  },
-  action: ({ data, id, selected, ...rest }) => {
-    // Filter out React Flow internal props that shouldn't be passed to DOM
-    const { zIndex, ...domProps } = rest;
-    return (
-      <div
-        {...domProps}
-        style={{
-          padding: 12,
-          borderRadius: 8,
-          background: '#fff',
-          border: '2px solid #d32f2f',
-          minWidth: 120,
-          maxWidth: 120,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          boxShadow: '0 2px 8px rgba(211,47,47,0.08)',
-          cursor: 'grab',
-          userSelect: 'none'
-        }}
-        onClick={() => setSelectedNodeId(id)}
-      >
-      <span style={{ fontSize: 24, marginBottom: 4 }}>🚀</span>
-      <span style={{ fontWeight: 'bold', fontSize: '14px' }}>Action</span>
-      {data.selected && <span style={{ fontSize: '12px', color: '#555', marginTop: 4 }}>{data.selected}</span>}
-      <Handle
-        type="source"
-        position="right"
-        id="right"
-        style={{
-          background: '#d32f2f',
-          width: 12,
-          height: 12,
-          border: '2px solid white',
-          boxShadow: '0 0 0 1px #d32f2f'
-        }}
-        isConnectable={true}
-      />
-      <Handle
-        type="target"
-        position="left"
-        id="left"
-        style={{
-          background: '#d32f2f',
-          width: 12,
-          height: 12,
-          border: '2px solid white',
-          boxShadow: '0 0 0 1px #d32f2f'
-        }}
-        isConnectable={true}
-      />
-    </div>
-    );
-  },
-});
+  );
+
+  return {
+    // Trigger Nodes
+    'subscription-trigger': ({ data, id, ...rest }) =>
+      createNodeComponent('🚀', 'Subscription', '#1976d2', data, id, setSelectedNodeId),
+
+    'newsletter-trigger': ({ data, id, ...rest }) =>
+      createNodeComponent('📬', 'Newsletter', '#1976d2', data, id, setSelectedNodeId),
+
+    // Condition Nodes
+    'product-condition': ({ data, id, ...rest }) =>
+      createNodeComponent('⚖️', 'Product', '#d97706', data, id, setSelectedNodeId),
+
+    'user-segment-condition': ({ data, id, ...rest }) =>
+      createNodeComponent('🎯', 'Segment', '#d97706', data, id, setSelectedNodeId),
+
+    // Timing Nodes
+    'delay-node': ({ data, id, ...rest }) =>
+      createNodeComponent('⏰', 'Delay', '#9c27b0', data, id, setSelectedNodeId),
+
+    'random-delay-node': ({ data, id, ...rest }) =>
+      createNodeComponent('🎲', 'Random Delay', '#9c27b0', data, id, setSelectedNodeId),
+
+    // Email Action Nodes
+    'welcome-email': ({ data, id, ...rest }) =>
+      createNodeComponent('👋', 'Welcome', '#d32f2f', data, id, setSelectedNodeId),
+
+    'newsletter-email': ({ data, id, ...rest }) =>
+      createNodeComponent('📧', 'Newsletter', '#d32f2f', data, id, setSelectedNodeId),
+
+    'follow-up-email': ({ data, id, ...rest }) =>
+      createNodeComponent('🔄', 'Follow-up', '#d32f2f', data, id, setSelectedNodeId),
+
+    'cta-config': ({ data, id, ...rest }) =>
+      createNodeComponent('🎯', 'CTA', '#e91e63', data, id, setSelectedNodeId),
+
+    'url-config': ({ data, id, ...rest }) =>
+      createNodeComponent('🔗', 'URL', '#795548', data, id, setSelectedNodeId),
+
+    // Flow Control Nodes
+    'split-node': ({ data, id, ...rest }) =>
+      createNodeComponent('🔀', 'Split', '#4caf50', data, id, setSelectedNodeId),
+
+    'merge-node': ({ data, id, ...rest }) =>
+      createNodeComponent('🔗', 'Merge', '#4caf50', data, id, setSelectedNodeId),
+
+    're-entry-rule': ({ data, id, ...rest }) =>
+      createNodeComponent('🔄', 'Re-entry', '#ff9800', data, id, setSelectedNodeId),
+
+    'end-node': ({ data, id, ...rest }) =>
+      createNodeComponent('🏁', 'End', '#607d8b', data, id, setSelectedNodeId),
+  };
+};
 
 function App() {
   const [nodes, setNodes] = useState(initialNodes);
@@ -586,191 +526,12 @@ function App() {
   return (
     <ReactFlowProvider>
       <div className="app">
-        <div className="sidebar">
-                    <button onClick={() => {
-                      setNodes([]);
-                      setEdges([]);
-                      setSelectedWorkflow(null); // Clear selected workflow for new workflow
-                    }}>New</button>
-          <button onClick={saveWorkflow}>Save Workflow</button>
-          <button
-            onClick={async () => {
-              try {
-                const response = await axios.post('/api/workflows/migrate');
-                alert(response.data.message);
-                // Reload workflows after migration
-                const workflowsResponse = await axios.get('/api/workflows');
-                setWorkflows(workflowsResponse.data);
-              } catch (error) {
-                alert('Migration failed: ' + error.message);
-              }
-            }}
-            style={{
-              backgroundColor: '#34c759',
-              color: 'white',
-              border: 'none',
-              padding: '10px 16px',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              marginBottom: '12px',
-              width: '100%'
-            }}
-          >
-            🔄 Migrate Old Workflows
-          </button>
-
-          <div style={{
-            fontSize: '11px',
-            color: '#666',
-            backgroundColor: '#f0f8ff',
-            padding: '8px',
-            borderRadius: '4px',
-            marginTop: '8px',
-            border: '1px solid #007aff'
-          }}>
-            ✅ Visual workflows are stored separately from JsonLogic rules. Both are maintained for editing and execution.
-          </div>
-
-          <div style={{ marginTop: '20px', borderTop: '1px solid #e5e5e7', paddingTop: '16px' }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#1d1d1f' }}>Auto Layout</h3>
-            <button onClick={applyAutoLayout} style={{ marginBottom: '8px', width: '100%' }}>
-              📐 Apply Layout
-            </button>
-            <div style={{ fontSize: '10px', color: '#999', textAlign: 'center', marginBottom: '8px' }}>
-              Shortcut: Ctrl/Cmd + L
-            </div>
-            <button onClick={cycleLayoutType} style={{ marginBottom: '8px', width: '100%', fontSize: '12px' }}>
-              🔄 {layoutType.charAt(0).toUpperCase() + layoutType.slice(1)}
-            </button>
-            <div style={{ fontSize: '12px', color: '#666', textAlign: 'center' }}>
-              Current: {layoutType}
-            </div>
-          </div>
-
-          <div style={{ marginTop: '20px', borderTop: '1px solid #e5e5e7', paddingTop: '16px' }}>
-            <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#1d1d1f' }}>JsonLogic</h3>
-            <button
-              onClick={() => setShowJsonLogic(!showJsonLogic)}
-              style={{ marginBottom: '8px', width: '100%', fontSize: '12px' }}
-            >
-              {showJsonLogic ? '🔽' : '▶️'} {showJsonLogic ? 'Hide' : 'Show'} Logic
-            </button>
-            {showJsonLogic && jsonLogicRule && (
-              <div style={{ marginBottom: '8px' }}>
-                <button onClick={testJsonLogic} style={{ marginBottom: '4px', width: '100%', fontSize: '11px' }}>
-                  🧪 Test Logic
-                </button>
-                <button onClick={copyJsonLogic} style={{ marginBottom: '8px', width: '100%', fontSize: '11px' }}>
-                  📋 Copy Logic
-                </button>
-                <div style={{
-                  fontSize: '10px',
-                  color: '#666',
-                  backgroundColor: '#f5f5f7',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  maxHeight: '150px',
-                  overflow: 'auto',
-                  fontFamily: 'monospace'
-                }}>
-                  <pre>{WorkflowToJsonLogicConverter.prettyPrint(jsonLogicRule)}</pre>
-                </div>
-              </div>
-            )}
-            {showJsonLogic && !jsonLogicRule && (
-              <div style={{ fontSize: '11px', color: '#999', textAlign: 'center' }}>
-                No workflow logic yet
-              </div>
-            )}
-          </div>
-
-          <div>
-            <h3>Saved Workflows</h3>
-            {workflows.length > 0 ? (
-              <div>
-                <select
-                  value={selectedWorkflow?.id || ''}
-                  onChange={(e) => {
-                    const workflowId = parseInt(e.target.value);
-                    const workflow = workflows.find(wf => wf.id === workflowId);
-                    if (workflow) loadWorkflow(workflow);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #e5e5e7',
-                    backgroundColor: '#ffffff',
-                    fontSize: '14px',
-                    color: '#1d1d1f',
-                    marginBottom: '12px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value="">Select a workflow...</option>
-                  {workflows.map(wf => (
-                    <option key={wf.id} value={wf.id}>
-                      {wf.name} (ID: {wf.id})
-                    </option>
-                  ))}
-                </select>
-
-                {selectedWorkflow && (
-                  <div style={{
-                    display: 'flex',
-                    gap: '8px',
-                    marginTop: '8px'
-                  }}>
-                    <button
-                      onClick={() => loadWorkflow(selectedWorkflow)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 12px',
-                        fontSize: '12px',
-                        backgroundColor: '#007aff',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      📂 Load
-                    </button>
-                    <button
-                      onClick={() => deleteWorkflow(selectedWorkflow.id)}
-                      style={{
-                        flex: 1,
-                        padding: '6px 12px',
-                        fontSize: '12px',
-                        backgroundColor: '#ff3b30',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🗑️ Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{
-                fontSize: '12px',
-                color: '#999',
-                textAlign: 'center',
-                padding: '16px',
-                backgroundColor: '#f5f5f7',
-                borderRadius: '6px'
-              }}>
-                No workflows saved yet
-              </div>
-            )}
-          </div>
+        {/* Top Right Node Selection Panel */}
+        <div className="top-right-panel">
           <Sidebar />
         </div>
+
+        {/* Main Canvas Area */}
         <div className="canvas-area">
           <div
             className={`canvas ${isDragOver ? 'drag-over' : ''}`}
@@ -836,6 +597,190 @@ function App() {
               onClose={() => setSelectedNodeId(null)}
             />
           )}
+        </div>
+
+        {/* Bottom Workflow Controls Panel */}
+        <div className="bottom-panel">
+          <div className="workflow-controls">
+            <div className="workflow-actions">
+              <button onClick={() => {
+                setNodes([]);
+                setEdges([]);
+                setSelectedWorkflow(null);
+              }}>New</button>
+              <button onClick={saveWorkflow}>Save Workflow</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await axios.post('/api/workflows/migrate');
+                    alert(response.data.message);
+                    const workflowsResponse = await axios.get('/api/workflows');
+                    setWorkflows(workflowsResponse.data);
+                  } catch (error) {
+                    alert('Migration failed: ' + error.message);
+                  }
+                }}
+                style={{
+                  backgroundColor: '#34c759',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 Migrate
+              </button>
+            </div>
+
+            <div className="workflow-management">
+              <h3>Saved Workflows</h3>
+              {workflows.length > 0 ? (
+                <div className="workflow-selector">
+                  <select
+                    value={selectedWorkflow?.id || ''}
+                    onChange={(e) => {
+                      const workflowId = parseInt(e.target.value);
+                      const workflow = workflows.find(wf => wf.id === workflowId);
+                      if (workflow) loadWorkflow(workflow);
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #e5e5e7',
+                      backgroundColor: '#ffffff',
+                      fontSize: '14px',
+                      color: '#1d1d1f',
+                      marginBottom: '12px',
+                      cursor: 'pointer',
+                      minWidth: '200px'
+                    }}
+                  >
+                    <option value="">Select a workflow...</option>
+                    {workflows.map(wf => (
+                      <option key={wf.id} value={wf.id}>
+                        {wf.name} (ID: {wf.id})
+                      </option>
+                    ))}
+                  </select>
+
+                  {selectedWorkflow && (
+                    <div className="workflow-buttons">
+                      <button
+                        onClick={() => loadWorkflow(selectedWorkflow)}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#007aff',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          marginRight: '8px'
+                        }}
+                      >
+                        📂 Load
+                      </button>
+                      <button
+                        onClick={() => deleteWorkflow(selectedWorkflow.id)}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#ff3b30',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{
+                  fontSize: '12px',
+                  color: '#999',
+                  textAlign: 'center',
+                  padding: '16px',
+                  backgroundColor: '#f5f5f7',
+                  borderRadius: '6px'
+                }}>
+                  No workflows saved yet
+                </div>
+              )}
+            </div>
+
+            <div className="layout-controls">
+              <h3>Layout</h3>
+              <button onClick={applyAutoLayout}>
+                📐 Apply Layout
+              </button>
+              <button onClick={cycleLayoutType}>
+                🔄 {layoutType.charAt(0).toUpperCase() + layoutType.slice(1)}
+              </button>
+              <div style={{ fontSize: '10px', color: '#999', textAlign: 'center' }}>
+                Shortcut: Ctrl/Cmd + L
+              </div>
+            </div>
+
+            <div className="jsonlogic-controls">
+              <h3>JsonLogic</h3>
+              <button
+                onClick={() => setShowJsonLogic(!showJsonLogic)}
+                style={{ fontSize: '12px' }}
+              >
+                {showJsonLogic ? '🔽' : '▶️'} {showJsonLogic ? 'Hide' : 'Show'} Logic
+              </button>
+              {showJsonLogic && jsonLogicRule && (
+                <div className="jsonlogic-actions">
+                  <button onClick={testJsonLogic} style={{ fontSize: '11px' }}>
+                    🧪 Test Logic
+                  </button>
+                  <button onClick={copyJsonLogic} style={{ fontSize: '11px' }}>
+                    📋 Copy Logic
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {showJsonLogic && jsonLogicRule && (
+            <div className="jsonlogic-display">
+              <div style={{
+                fontSize: '10px',
+                color: '#666',
+                backgroundColor: '#f5f5f7',
+                padding: '8px',
+                borderRadius: '4px',
+                maxHeight: '150px',
+                overflow: 'auto',
+                fontFamily: 'monospace'
+              }}>
+                <pre>{WorkflowToJsonLogicConverter.prettyPrint(jsonLogicRule)}</pre>
+              </div>
+            </div>
+          )}
+
+          {showJsonLogic && !jsonLogicRule && (
+            <div style={{ fontSize: '11px', color: '#999', textAlign: 'center' }}>
+              No workflow logic yet
+            </div>
+          )}
+
+          <div style={{
+            fontSize: '11px',
+            color: '#666',
+            backgroundColor: '#f0f8ff',
+            padding: '8px',
+            borderRadius: '4px',
+            border: '1px solid #007aff'
+          }}>
+            ✅ Visual workflows are stored separately from JsonLogic rules. Both are maintained for editing and execution.
+          </div>
         </div>
       </div>
     </ReactFlowProvider>
