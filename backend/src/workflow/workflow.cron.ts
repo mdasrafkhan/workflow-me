@@ -41,6 +41,15 @@ const mockSubscribers = [
 
 @Injectable()
 export class WorkflowCron {
+  private lastExecutionTime: Date | null = null;
+  private executionHistory: Array<{
+    timestamp: Date;
+    workflowsProcessed: number;
+    successCount: number;
+    errorCount: number;
+    executionTime: number;
+  }> = [];
+
   constructor(
     private readonly workflowService: WorkflowService,
     private readonly workflowExecutor: WorkflowExecutor
@@ -48,6 +57,7 @@ export class WorkflowCron {
 
       @Cron('* * * * *') // Runs every minute
   async handleCron() {
+    const startTime = Date.now();
     console.log('Executing workflow cron job...');
 
     // Test JsonLogic first
@@ -55,10 +65,106 @@ export class WorkflowCron {
     console.log(`JsonLogic test result: ${jsonLogicTest}`);
 
     const workflows = await this.workflowService.findAllWithJsonLogic();
+    let successCount = 0;
+    let errorCount = 0;
+
     for (const wf of workflows) {
       console.log(`Processing workflow: ${wf.name} (ID: ${wf.id})`);
-      await this.executeWorkflowWithNewEngine(wf.jsonLogic, wf.id);
+      try {
+        await this.executeWorkflowWithNewEngine(wf.jsonLogic, wf.id);
+        successCount++;
+      } catch (error) {
+        console.error(`Error processing workflow ${wf.id}:`, error);
+        errorCount++;
+      }
     }
+
+    // Record execution statistics
+    const executionTime = Date.now() - startTime;
+    this.lastExecutionTime = new Date();
+    this.executionHistory.push({
+      timestamp: this.lastExecutionTime,
+      workflowsProcessed: workflows.length,
+      successCount,
+      errorCount,
+      executionTime
+    });
+
+    // Keep only last 10 executions in history
+    if (this.executionHistory.length > 10) {
+      this.executionHistory = this.executionHistory.slice(-10);
+    }
+
+    console.log(`Cron job completed: ${workflows.length} workflows processed, ${successCount} successful, ${errorCount} errors, ${executionTime}ms`);
+  }
+
+  /**
+   * Get cron job status and statistics
+   */
+  getCronStatus(): {
+    isRunning: boolean;
+    lastExecutionTime: Date | null;
+    executionHistory: Array<{
+      timestamp: Date;
+      workflowsProcessed: number;
+      successCount: number;
+      errorCount: number;
+      executionTime: number;
+    }>;
+    nextExecutionTime: Date;
+    schedule: string;
+  } {
+    const now = new Date();
+    const nextExecutionTime = new Date(now.getTime() + 60000); // Next minute
+
+    return {
+      isRunning: true, // Cron is always "running" if the service is up
+      lastExecutionTime: this.lastExecutionTime,
+      executionHistory: this.executionHistory,
+      nextExecutionTime,
+      schedule: 'Every minute (* * * * *)'
+    };
+  }
+
+  /**
+   * Get detailed cron job metrics
+   */
+  getCronMetrics(): {
+    totalExecutions: number;
+    averageExecutionTime: number;
+    successRate: number;
+    totalWorkflowsProcessed: number;
+    last24Hours: {
+      executions: number;
+      totalWorkflows: number;
+      averageTime: number;
+      successRate: number;
+    };
+  } {
+    const totalExecutions = this.executionHistory.length;
+    const totalWorkflows = this.executionHistory.reduce((sum, exec) => sum + exec.workflowsProcessed, 0);
+    const totalTime = this.executionHistory.reduce((sum, exec) => sum + exec.executionTime, 0);
+    const totalSuccess = this.executionHistory.reduce((sum, exec) => sum + exec.successCount, 0);
+    const totalErrors = this.executionHistory.reduce((sum, exec) => sum + exec.errorCount, 0);
+
+    const averageExecutionTime = totalExecutions > 0 ? totalTime / totalExecutions : 0;
+    const successRate = totalWorkflows > 0 ? (totalSuccess / totalWorkflows) * 100 : 0;
+
+    // Last 24 hours (assuming executions are recent)
+    const last24Hours = {
+      executions: totalExecutions,
+      totalWorkflows,
+      averageTime: averageExecutionTime,
+      successRate
+    };
+
+    return {
+      totalExecutions,
+      averageExecutionTime,
+      successRate,
+      totalWorkflowsProcessed: totalWorkflows,
+      last24Hours
+    };
   }
 
   /**

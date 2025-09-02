@@ -51,16 +51,74 @@ let WorkflowCron = class WorkflowCron {
     constructor(workflowService, workflowExecutor) {
         this.workflowService = workflowService;
         this.workflowExecutor = workflowExecutor;
+        this.lastExecutionTime = null;
+        this.executionHistory = [];
     }
     async handleCron() {
+        const startTime = Date.now();
         console.log('Executing workflow cron job...');
         const jsonLogicTest = this.workflowExecutor.testJsonLogic();
         console.log(`JsonLogic test result: ${jsonLogicTest}`);
         const workflows = await this.workflowService.findAllWithJsonLogic();
+        let successCount = 0;
+        let errorCount = 0;
         for (const wf of workflows) {
             console.log(`Processing workflow: ${wf.name} (ID: ${wf.id})`);
-            await this.executeWorkflowWithNewEngine(wf.jsonLogic, wf.id);
+            try {
+                await this.executeWorkflowWithNewEngine(wf.jsonLogic, wf.id);
+                successCount++;
+            }
+            catch (error) {
+                console.error(`Error processing workflow ${wf.id}:`, error);
+                errorCount++;
+            }
         }
+        const executionTime = Date.now() - startTime;
+        this.lastExecutionTime = new Date();
+        this.executionHistory.push({
+            timestamp: this.lastExecutionTime,
+            workflowsProcessed: workflows.length,
+            successCount,
+            errorCount,
+            executionTime
+        });
+        if (this.executionHistory.length > 10) {
+            this.executionHistory = this.executionHistory.slice(-10);
+        }
+        console.log(`Cron job completed: ${workflows.length} workflows processed, ${successCount} successful, ${errorCount} errors, ${executionTime}ms`);
+    }
+    getCronStatus() {
+        const now = new Date();
+        const nextExecutionTime = new Date(now.getTime() + 60000);
+        return {
+            isRunning: true,
+            lastExecutionTime: this.lastExecutionTime,
+            executionHistory: this.executionHistory,
+            nextExecutionTime,
+            schedule: 'Every minute (* * * * *)'
+        };
+    }
+    getCronMetrics() {
+        const totalExecutions = this.executionHistory.length;
+        const totalWorkflows = this.executionHistory.reduce((sum, exec) => sum + exec.workflowsProcessed, 0);
+        const totalTime = this.executionHistory.reduce((sum, exec) => sum + exec.executionTime, 0);
+        const totalSuccess = this.executionHistory.reduce((sum, exec) => sum + exec.successCount, 0);
+        const totalErrors = this.executionHistory.reduce((sum, exec) => sum + exec.errorCount, 0);
+        const averageExecutionTime = totalExecutions > 0 ? totalTime / totalExecutions : 0;
+        const successRate = totalWorkflows > 0 ? (totalSuccess / totalWorkflows) * 100 : 0;
+        const last24Hours = {
+            executions: totalExecutions,
+            totalWorkflows,
+            averageTime: averageExecutionTime,
+            successRate
+        };
+        return {
+            totalExecutions,
+            averageExecutionTime,
+            successRate,
+            totalWorkflowsProcessed: totalWorkflows,
+            last24Hours
+        };
     }
     async executeWorkflowWithNewEngine(jsonLogicRule, workflowId) {
         var _a;

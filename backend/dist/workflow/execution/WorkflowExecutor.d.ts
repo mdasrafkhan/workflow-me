@@ -16,7 +16,10 @@ export declare class WorkflowExecutor {
     private executeSendEmailAction;
     private executeUpdateUserAction;
     private executeCreateTaskAction;
-    private validateJsonLogicRule;
+    validateJsonLogicRule(rule: any): {
+        isValid: boolean;
+        errors: string[];
+    };
     private generateExecutionId;
     private generateStepId;
     testJsonLogic(): boolean;

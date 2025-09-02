@@ -95,42 +95,20 @@ export class JsonLogicConverter {
       };
     }
 
-    // If current logic is a condition, chain it with AND
-    if (currentLogic["=="] || currentLogic["!="] || currentLogic[">"] || currentLogic["<"]) {
-      return {
-        "and": [
-          currentLogic,
-          nextLogic
-        ]
-      };
-    }
+    // Flatten nested AND operations for cleaner structure
+    const flattenAnd = (logic) => {
+      if (logic.and && Array.isArray(logic.and)) {
+        return logic.and;
+      }
+      return [logic];
+    };
 
-    // If current logic is a delay, wrap it with the next logic
-    if (currentLogic.delay) {
-      return {
-        "delay_chain": {
-          "delay": currentLogic.delay,
-          "next": nextLogic
-        }
-      };
-    }
+    const currentParts = flattenAnd(currentLogic);
+    const nextParts = flattenAnd(nextLogic);
 
-    // If current logic is an action, chain it with the next logic
-    if (currentLogic.action) {
-      return {
-        "action_chain": {
-          "action": currentLogic.action,
-          "next": nextLogic
-        }
-      };
-    }
-
-    // Default: use AND logic
+    // Combine all parts into a single AND operation
     return {
-      "and": [
-        currentLogic,
-        nextLogic
-      ]
+      "and": [...currentParts, ...nextParts]
     };
   }
 
@@ -161,6 +139,9 @@ export class JsonLogicConverter {
     } else if (nodeType && nodeType.category === 'Flow Control') {
       // Flow control branching
       return this.createFlowControlBranch(node, nodeLogic, branches);
+    } else if (nodeType && nodeType.category === 'Actions') {
+      // Action nodes with multiple paths - execute all paths
+      return this.createActionBranch(nodeLogic, branches);
     } else {
       // Default: parallel execution
       return this.createParallelBranch(nodeLogic, branches);
@@ -230,6 +211,21 @@ export class JsonLogicConverter {
 
     // Default: parallel execution
     return this.createParallelBranch(nodeLogic, branches);
+  }
+
+  /**
+   * Create action branch logic (for action nodes with multiple paths)
+   */
+  static createActionBranch(nodeLogic, branches) {
+    if (branches.length === 1) {
+      return this.chainLogic(nodeLogic, branches[0]);
+    }
+
+    // Action nodes with multiple paths - execute all paths
+    const allBranches = [nodeLogic, ...branches];
+    return {
+      "and": allBranches
+    };
   }
 
   /**

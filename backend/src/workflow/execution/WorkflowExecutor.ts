@@ -572,7 +572,7 @@ export class WorkflowExecutor {
   /**
    * Validate JsonLogic rule structure
    */
-  private validateJsonLogicRule(rule: any): { isValid: boolean; errors: string[] } {
+  public validateJsonLogicRule(rule: any): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     if (!rule || typeof rule !== 'object') {
