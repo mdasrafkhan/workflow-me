@@ -494,3 +494,37 @@ kbd {
   stroke-width: 4;
   stroke-opacity: 1;
 }
+
+.template-controls {
+  min-width: 120px;
+}
+
+.template-controls h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.template-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.template-controls button {
+  background: #007aff;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.template-controls button:hover {
+  background: #0056cc;
+}

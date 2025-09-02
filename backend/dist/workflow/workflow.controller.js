@@ -15,9 +15,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkflowController = void 0;
 const common_1 = require("@nestjs/common");
 const workflow_service_1 = require("./workflow.service");
+const WorkflowExecutor_1 = require("./execution/WorkflowExecutor");
 let WorkflowController = class WorkflowController {
-    constructor(workflowService) {
+    constructor(workflowService, workflowExecutor) {
         this.workflowService = workflowService;
+        this.workflowExecutor = workflowExecutor;
     }
     findAll() {
         return this.workflowService.findAll();
@@ -33,6 +35,13 @@ let WorkflowController = class WorkflowController {
     }
     async migrateOldWorkflows() {
         return this.workflowService.migrateOldWorkflows();
+    }
+    testJsonLogic() {
+        const result = this.workflowExecutor.testJsonLogic();
+        return {
+            success: result,
+            message: result ? 'JsonLogic is working correctly' : 'JsonLogic test failed'
+        };
     }
 };
 exports.WorkflowController = WorkflowController;
@@ -69,8 +78,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], WorkflowController.prototype, "migrateOldWorkflows", null);
+__decorate([
+    (0, common_1.Get)('test/jsonlogic'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Object)
+], WorkflowController.prototype, "testJsonLogic", null);
 exports.WorkflowController = WorkflowController = __decorate([
     (0, common_1.Controller)('api/workflows'),
-    __metadata("design:paramtypes", [workflow_service_1.WorkflowService])
+    __metadata("design:paramtypes", [workflow_service_1.WorkflowService,
+        WorkflowExecutor_1.WorkflowExecutor])
 ], WorkflowController);
 //# sourceMappingURL=workflow.controller.js.map

@@ -14,14 +14,16 @@ const json_logic_rule_entity_1 = require("./json-logic-rule.entity");
 const workflow_service_1 = require("./workflow.service");
 const workflow_controller_1 = require("./workflow.controller");
 const workflow_cron_1 = require("./workflow.cron");
+const WorkflowExecutor_1 = require("./execution/WorkflowExecutor");
 let WorkflowModule = class WorkflowModule {
 };
 exports.WorkflowModule = WorkflowModule;
 exports.WorkflowModule = WorkflowModule = __decorate([
     (0, common_1.Module)({
         imports: [typeorm_1.TypeOrmModule.forFeature([visual_workflow_entity_1.VisualWorkflow, json_logic_rule_entity_1.JsonLogicRule])],
-        providers: [workflow_service_1.WorkflowService, workflow_cron_1.WorkflowCron],
+        providers: [workflow_service_1.WorkflowService, workflow_cron_1.WorkflowCron, WorkflowExecutor_1.WorkflowExecutor],
         controllers: [workflow_controller_1.WorkflowController],
+        exports: [workflow_service_1.WorkflowService, WorkflowExecutor_1.WorkflowExecutor],
     })
 ], WorkflowModule);
 //# sourceMappingURL=workflow.module.js.map

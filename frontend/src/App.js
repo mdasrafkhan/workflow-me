@@ -6,7 +6,10 @@ import Sidebar from './Sidebar';
 import PropertiesPanel from './PropertiesPanel'; // Import the new PropertiesPanel
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
-import WorkflowToJsonLogicConverter from './utils/workflowToJsonLogic';
+import { NodeRegistry } from './core/NodeRegistry';
+import { JsonLogicConverter } from './core/JsonLogicConverter';
+import { WorkflowValidator } from './core/WorkflowValidator';
+import { WorkflowTemplates } from './core/WorkflowTemplates';
 import './App.css';
 
 const initialNodes = [];
@@ -74,57 +77,22 @@ const createNodeTypes = (setSelectedNodeId) => {
     </div>
   );
 
-  return {
-    // Trigger Nodes
-    'subscription-trigger': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🚀', 'Subscription', '#1976d2', data, id, setSelectedNodeId, selected),
+  // Generate node types from NodeRegistry
+  const nodeTypes = {};
+  NodeRegistry.getAllNodeTypes().forEach((nodeType, type) => {
+    nodeTypes[type] = ({ data, id, selected, ...rest }) =>
+      createNodeComponent(
+        nodeType.icon,
+        nodeType.label,
+        nodeType.color,
+        data,
+        id,
+        setSelectedNodeId,
+        selected
+      );
+  });
 
-    'newsletter-trigger': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('📬', 'Newsletter', '#1976d2', data, id, setSelectedNodeId, selected),
-
-    // Condition Nodes
-    'product-condition': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('⚖️', 'Product', '#d97706', data, id, setSelectedNodeId, selected),
-
-    'user-segment-condition': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🎯', 'Segment', '#d97706', data, id, setSelectedNodeId, selected),
-
-    // Timing Nodes
-    'delay-node': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('⏰', 'Delay', '#9c27b0', data, id, setSelectedNodeId, selected),
-
-    'random-delay-node': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🎲', 'Random Delay', '#9c27b0', data, id, setSelectedNodeId, selected),
-
-    // Email Action Nodes
-    'welcome-email': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('👋', 'Welcome', '#d32f2f', data, id, setSelectedNodeId, selected),
-
-    'newsletter-email': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('📧', 'Newsletter', '#d32f2f', data, id, setSelectedNodeId, selected),
-
-    'follow-up-email': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🔄', 'Follow-up', '#d32f2f', data, id, setSelectedNodeId, selected),
-
-    'cta-config': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🎯', 'CTA', '#e91e63', data, id, setSelectedNodeId, selected),
-
-    'url-config': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🔗', 'URL', '#795548', data, id, setSelectedNodeId, selected),
-
-    // Flow Control Nodes
-    'split-node': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🔀', 'Split', '#4caf50', data, id, setSelectedNodeId, selected),
-
-    'merge-node': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🔗', 'Merge', '#4caf50', data, id, setSelectedNodeId, selected),
-
-    're-entry-rule': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🔄', 'Re-entry', '#ff9800', data, id, setSelectedNodeId, selected),
-
-    'end-node': ({ data, id, selected, ...rest }) =>
-      createNodeComponent('🏁', 'End', '#607d8b', data, id, setSelectedNodeId, selected),
-  };
+  return nodeTypes;
 };
 
 function App() {
@@ -149,7 +117,7 @@ function App() {
   // Generate JsonLogic when nodes or edges change
   useEffect(() => {
     if (nodes.length > 0) {
-      const rule = WorkflowToJsonLogicConverter.convertWorkflow(nodes, edges);
+      const rule = JsonLogicConverter.convertWorkflow(nodes, edges);
       setJsonLogicRule(rule);
     } else {
       setJsonLogicRule(null);
@@ -334,16 +302,39 @@ function App() {
   // JsonLogic utility functions
   const testJsonLogic = () => {
     if (!jsonLogicRule) return;
-    const result = WorkflowToJsonLogicConverter.testJsonLogic(jsonLogicRule);
-    alert(`JsonLogic Test Result: ${result ? 'TRUE' : 'FALSE'}`);
+    const testResult = JsonLogicConverter.testRule(jsonLogicRule);
+
+    if (testResult.success) {
+      alert(`JsonLogic Test Result: ${JSON.stringify(testResult.result, null, 2)}`);
+    } else {
+      alert(`JsonLogic Test Error: ${testResult.error}`);
+    }
   };
 
   const copyJsonLogic = () => {
     if (!jsonLogicRule) return;
-    const jsonString = WorkflowToJsonLogicConverter.prettyPrint(jsonLogicRule);
+    const jsonString = JSON.stringify(jsonLogicRule, null, 2);
     navigator.clipboard.writeText(jsonString).then(() => {
       alert('JsonLogic copied to clipboard!');
     });
+  };
+
+  const validateWorkflow = () => {
+    const validationResult = WorkflowValidator.validateWorkflow(nodes, edges);
+    const summary = WorkflowValidator.getValidationSummary(validationResult);
+    alert(summary);
+  };
+
+  const loadTemplate = (templateId) => {
+    try {
+      const workflow = WorkflowTemplates.createWorkflowFromTemplate(templateId);
+      setNodes(workflow.nodes);
+      setEdges(workflow.edges);
+      setSelectedWorkflow(null); // Clear selected workflow
+      alert(`Loaded template: ${workflow.name}`);
+    } catch (error) {
+      alert(`Failed to load template: ${error.message}`);
+    }
   };
 
   const loadWorkflow = wf => {
@@ -646,6 +637,7 @@ function App() {
                 setSelectedWorkflow(null);
               }}>New</button>
               <button onClick={saveWorkflow}>Save Workflow</button>
+              <button onClick={validateWorkflow} style={{ backgroundColor: '#ff9500' }}>Validate</button>
               <button
                 onClick={async () => {
                   try {
@@ -749,6 +741,42 @@ function App() {
                   No workflows saved yet
                 </div>
               )}
+            </div>
+
+            <div className="template-controls">
+              <h3>Templates</h3>
+              <div className="template-buttons">
+                <button
+                  onClick={() => loadTemplate('subscription-welcome-series')}
+                  style={{ fontSize: '11px', marginBottom: '4px' }}
+                >
+                  📧 Subscription Welcome
+                </button>
+                <button
+                  onClick={() => loadTemplate('newsletter-welcome-series')}
+                  style={{ fontSize: '11px', marginBottom: '4px' }}
+                >
+                  📬 Newsletter Welcome
+                </button>
+                <button
+                  onClick={() => loadTemplate('segmented-welcome-template')}
+                  style={{ fontSize: '11px', marginBottom: '4px' }}
+                >
+                  🎯 Segmented Welcome
+                </button>
+                <button
+                  onClick={() => loadTemplate('re-engagement-campaign')}
+                  style={{ fontSize: '11px', marginBottom: '4px' }}
+                >
+                  🔄 Re-engagement
+                </button>
+                <button
+                  onClick={() => loadTemplate('ab-test-template')}
+                  style={{ fontSize: '11px', marginBottom: '4px' }}
+                >
+                  🧪 A/B Test
+                </button>
+              </div>
             </div>
 
             <div className="layout-controls">

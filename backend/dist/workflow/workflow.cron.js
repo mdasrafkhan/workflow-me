@@ -13,22 +13,78 @@ exports.WorkflowCron = void 0;
 const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const workflow_service_1 = require("./workflow.service");
+const WorkflowExecutor_1 = require("./execution/WorkflowExecutor");
 const jsonLogic = require('json-logic-js');
 const mockSubscribers = [
-    { id: 1, email: 'user1@example.com', payment: 'paid', created_at: new Date('2023-01-01') },
-    { id: 2, email: 'user2@example.com', payment: 'unpaid', created_at: new Date('2024-07-01') },
-    { id: 3, email: 'user3@example.com', payment: 'paid', created_at: new Date('2024-08-01') },
+    {
+        id: 1,
+        email: 'user1@example.com',
+        payment: 'paid',
+        created_at: new Date('2023-01-01'),
+        subscription_package: 'premium',
+        subscription_status: 'active',
+        newsletter_subscribed: true,
+        user_segment: 'new_user'
+    },
+    {
+        id: 2,
+        email: 'user2@example.com',
+        payment: 'unpaid',
+        created_at: new Date('2024-07-01'),
+        subscription_package: 'basic',
+        subscription_status: 'inactive',
+        newsletter_subscribed: false,
+        user_segment: 'returning_user'
+    },
+    {
+        id: 3,
+        email: 'user3@example.com',
+        payment: 'paid',
+        created_at: new Date('2024-08-01'),
+        subscription_package: 'enterprise',
+        subscription_status: 'active',
+        newsletter_subscribed: true,
+        user_segment: 'premium_user'
+    },
 ];
 let WorkflowCron = class WorkflowCron {
-    constructor(workflowService) {
+    constructor(workflowService, workflowExecutor) {
         this.workflowService = workflowService;
+        this.workflowExecutor = workflowExecutor;
     }
     async handleCron() {
         console.log('Executing workflow cron job...');
+        const jsonLogicTest = this.workflowExecutor.testJsonLogic();
+        console.log(`JsonLogic test result: ${jsonLogicTest}`);
         const workflows = await this.workflowService.findAllWithJsonLogic();
         for (const wf of workflows) {
             console.log(`Processing workflow: ${wf.name} (ID: ${wf.id})`);
-            await this.executeWorkflowWithJsonLogic(wf.jsonLogic, wf.id);
+            await this.executeWorkflowWithNewEngine(wf.jsonLogic, wf.id);
+        }
+    }
+    async executeWorkflowWithNewEngine(jsonLogicRule, workflowId) {
+        var _a;
+        console.log(`Workflow ${workflowId}: Executing with enhanced engine`);
+        console.log(`JsonLogic Rule:`, JSON.stringify(jsonLogicRule, null, 2));
+        for (const subscriber of mockSubscribers) {
+            try {
+                const context = {
+                    data: subscriber,
+                    metadata: {
+                        source: 'cron',
+                        timestamp: new Date(),
+                        userId: subscriber.id.toString()
+                    }
+                };
+                const result = await this.workflowExecutor.executeWorkflow(workflowId, jsonLogicRule, context);
+                console.log(`Workflow ${workflowId}: Subscriber ${subscriber.id} - Execution result:`, result);
+                if (result.success && ((_a = result.result) === null || _a === void 0 ? void 0 : _a.execute)) {
+                    console.log(`Workflow ${workflowId}: Subscriber ${subscriber.id} - Action executed successfully`);
+                }
+            }
+            catch (error) {
+                console.error(`Workflow ${workflowId}: Enhanced execution error for subscriber ${subscriber.id}:`, error);
+            }
         }
     }
     async executeWorkflowWithJsonLogic(jsonLogicRule, workflowId) {
@@ -70,6 +126,7 @@ __decorate([
 ], WorkflowCron.prototype, "handleCron", null);
 exports.WorkflowCron = WorkflowCron = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [workflow_service_1.WorkflowService])
+    __metadata("design:paramtypes", [workflow_service_1.WorkflowService,
+        WorkflowExecutor_1.WorkflowExecutor])
 ], WorkflowCron);
 //# sourceMappingURL=workflow.cron.js.map

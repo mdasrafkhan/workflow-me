@@ -1,94 +1,91 @@
 import React from 'react';
+import { NodeRegistry } from './core/NodeRegistry';
 
 function PropertiesPanel({ node, onChange, onClose, onDelete }) {
   if (!node) {
     return null; // Or a placeholder message
   }
 
-  let options = [];
-  let label = '';
-  let currentValue = node.data?.selected || '';
+  // Get node type configuration from NodeRegistry
+  const nodeType = NodeRegistry.getNodeType(node.type);
 
-  if (node.type === 'subscription-trigger') {
-    options = ['user_buys_subscription', 'subscription_renewed', 'subscription_cancelled'];
-    label = 'Select Trigger Event';
-  } else if (node.type === 'newsletter-trigger') {
-    options = ['user_signs_up_newsletter', 'newsletter_opt_in', 'newsletter_import'];
-    label = 'Select Trigger Event';
-  } else if (node.type === 'product-condition') {
-    options = ['basic', 'premium', 'enterprise', 'student', 'family'];
-    label = 'Select Product Package';
-  } else if (node.type === 'user-segment-condition') {
-    options = ['new_user', 'returning_user', 'high_value', 'at_risk', 'engaged'];
-    label = 'Select User Segment';
-  } else if (node.type === 'delay-node') {
-    options = ['1_hour', '1_day', '2_days', '3_days', '1_week', '2_weeks'];
-    label = 'Select Delay Duration';
-  } else if (node.type === 'random-delay-node') {
-    options = ['1_3_days', '3_5_days', '1_2_weeks', '2_4_weeks'];
-    label = 'Select Random Delay Range';
-  } else if (node.type === 'welcome-email') {
-    options = ['subscription_welcome', 'newsletter_welcome', 'premium_welcome', 'basic_welcome'];
-    label = 'Select Welcome Email Template';
-  } else if (node.type === 'cta-config') {
-    options = ['check_out_latest_newsletter', 'explore_premium_features', 'start_free_trial', 'contact_support', 'custom'];
-    label = 'Select Call to Action';
-  } else if (node.type === 'newsletter-email') {
-    options = ['weekly_newsletter', 'daily_digest', 'breaking_news', 'featured_content'];
-    label = 'Select Newsletter Template';
-  } else if (node.type === 'follow-up-email') {
-    options = ['value_drop', 'engagement_boost', 're_engagement', 'upsell_offer'];
-    label = 'Select Follow-up Template';
-  } else if (node.type === 'split-node') {
-    options = ['product_based', 'user_segment_based', 'time_based', 'behavior_based'];
-    label = 'Select Split Logic';
-  } else if (node.type === 'merge-node') {
-    options = ['all_paths', 'first_complete', 'majority_complete', 'custom_logic'];
-    label = 'Select Merge Logic';
-  } else if (node.type === 'end-node') {
-    options = ['workflow_complete', 'user_unsubscribed', 'max_emails_sent', 'error_occurred'];
-    label = 'Select End Condition';
-  } else if (node.type === 're-entry-rule') {
-    options = ['once_only', 'once_per_product_package', 'once_per_user', 'unlimited'];
-    label = 'Select Re-entry Rule';
-  } else if (node.type === 'url-config') {
-    options = ['product_package_24', 'product_package_128', 'newsletter_integration_5', 'admin_dashboard', 'custom'];
-    label = 'Select Admin URL';
-  } else {
-    // For other node types or if type is not recognized
+  if (!nodeType || !nodeType.properties || nodeType.properties.length === 0) {
     return (
       <div style={panelStyle}>
         <h3>Node Properties</h3>
-        <p>No properties available for this node type.</p>
-        <button onClick={onClose} style={buttonStyle}>Close</button>
+        <p>No configurable properties for this node type.</p>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+          <button onClick={onClose} style={buttonStyle}>Close</button>
+          <button
+            onClick={() => {
+              if (window.confirm('Are you sure you want to delete this node?')) {
+                onDelete && onDelete();
+                onClose();
+              }
+            }}
+            style={{
+              ...buttonStyle,
+              backgroundColor: '#ff3b30',
+              color: 'white'
+            }}
+          >
+            🗑️ Delete Node
+          </button>
+        </div>
       </div>
     );
   }
 
-  const handleChange = (e) => {
-    const selectedValue = e.target.value;
-    onChange({ selected: selectedValue });
-    // Optionally, you can also update the label of the node here if needed
-    // For example: onChange({ selected: selectedValue, label: `${node.type} (${selectedValue})` });
+  // Render properties dynamically
+  const renderProperty = (property) => {
+    const currentValue = node.data?.[property.key] || property.default || '';
+
+    if (property.type === 'select') {
+      return (
+        <div key={property.key} style={{ marginBottom: '16px' }}>
+          <label htmlFor={property.key} style={labelStyle}>{property.label}:</label>
+          <select
+            id={property.key}
+            value={currentValue}
+            onChange={(e) => {
+              const newData = { ...node.data, [property.key]: e.target.value };
+              onChange(newData);
+            }}
+            style={selectStyle}
+          >
+            <option value="">--Please choose an option--</option>
+            {property.options.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      );
+    } else if (property.type === 'text') {
+      return (
+        <div key={property.key} style={{ marginBottom: '16px' }}>
+          <label htmlFor={property.key} style={labelStyle}>{property.label}:</label>
+          <input
+            id={property.key}
+            type="text"
+            value={currentValue}
+            onChange={(e) => {
+              const newData = { ...node.data, [property.key]: e.target.value };
+              onChange(newData);
+            }}
+            style={selectStyle}
+            placeholder={property.placeholder || ''}
+          />
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
     <div style={panelStyle}>
-      <h3>Edit {node.type.charAt(0).toUpperCase() + node.type.slice(1)} Node</h3>
-      <div style={{ marginBottom: '16px' }}>
-        <label htmlFor="property-select" style={labelStyle}>{label}:</label>
-        <select
-          id="property-select"
-          value={currentValue}
-          onChange={handleChange}
-          style={selectStyle}
-        >
-          <option value="">--Please choose an option--</option>
-          {options.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
-      </div>
+      <h3>Edit {nodeType.label} Node</h3>
+      {nodeType.properties.map(renderProperty)}
       <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
         <button onClick={onClose} style={buttonStyle}>Close</button>
         <button
