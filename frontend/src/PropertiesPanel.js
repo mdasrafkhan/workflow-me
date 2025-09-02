@@ -1,6 +1,6 @@
 import React from 'react';
 
-function PropertiesPanel({ node, onChange, onClose }) {
+function PropertiesPanel({ node, onChange, onClose, onDelete }) {
   if (!node) {
     return null; // Or a placeholder message
   }
@@ -89,7 +89,24 @@ function PropertiesPanel({ node, onChange, onClose }) {
           ))}
         </select>
       </div>
-      <button onClick={onClose} style={buttonStyle}>Close</button>
+      <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+        <button onClick={onClose} style={buttonStyle}>Close</button>
+        <button
+          onClick={() => {
+            if (window.confirm('Are you sure you want to delete this node?')) {
+              onDelete && onDelete();
+              onClose();
+            }
+          }}
+          style={{
+            ...buttonStyle,
+            backgroundColor: '#ff3b30',
+            color: 'white'
+          }}
+        >
+          🗑️ Delete Node
+        </button>
+      </div>
     </div>
   );
 }

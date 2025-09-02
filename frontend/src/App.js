@@ -45,9 +45,13 @@ const createNodeTypes = (setSelectedNodeId) => {
   });
 
   // Common node component generator
-  const createNodeComponent = (icon, label, color, data, id, setSelectedNodeId) => (
+  const createNodeComponent = (icon, label, color, data, id, setSelectedNodeId, isSelected) => (
     <div
-      style={createNodeStyle(color)}
+      style={{
+        ...createNodeStyle(color),
+        border: isSelected ? `3px solid #007aff` : `2px solid ${color}`,
+        boxShadow: isSelected ? `0 0 0 2px rgba(0,122,255,0.2), 0 2px 8px ${color}20` : `0 2px 8px ${color}20`
+      }}
       onClick={() => setSelectedNodeId(id)}
     >
       <span style={{ fontSize: 24, marginBottom: 4 }}>{icon}</span>
@@ -72,54 +76,54 @@ const createNodeTypes = (setSelectedNodeId) => {
 
   return {
     // Trigger Nodes
-    'subscription-trigger': ({ data, id, ...rest }) =>
-      createNodeComponent('🚀', 'Subscription', '#1976d2', data, id, setSelectedNodeId),
+    'subscription-trigger': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🚀', 'Subscription', '#1976d2', data, id, setSelectedNodeId, selected),
 
-    'newsletter-trigger': ({ data, id, ...rest }) =>
-      createNodeComponent('📬', 'Newsletter', '#1976d2', data, id, setSelectedNodeId),
+    'newsletter-trigger': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('📬', 'Newsletter', '#1976d2', data, id, setSelectedNodeId, selected),
 
     // Condition Nodes
-    'product-condition': ({ data, id, ...rest }) =>
-      createNodeComponent('⚖️', 'Product', '#d97706', data, id, setSelectedNodeId),
+    'product-condition': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('⚖️', 'Product', '#d97706', data, id, setSelectedNodeId, selected),
 
-    'user-segment-condition': ({ data, id, ...rest }) =>
-      createNodeComponent('🎯', 'Segment', '#d97706', data, id, setSelectedNodeId),
+    'user-segment-condition': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🎯', 'Segment', '#d97706', data, id, setSelectedNodeId, selected),
 
     // Timing Nodes
-    'delay-node': ({ data, id, ...rest }) =>
-      createNodeComponent('⏰', 'Delay', '#9c27b0', data, id, setSelectedNodeId),
+    'delay-node': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('⏰', 'Delay', '#9c27b0', data, id, setSelectedNodeId, selected),
 
-    'random-delay-node': ({ data, id, ...rest }) =>
-      createNodeComponent('🎲', 'Random Delay', '#9c27b0', data, id, setSelectedNodeId),
+    'random-delay-node': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🎲', 'Random Delay', '#9c27b0', data, id, setSelectedNodeId, selected),
 
     // Email Action Nodes
-    'welcome-email': ({ data, id, ...rest }) =>
-      createNodeComponent('👋', 'Welcome', '#d32f2f', data, id, setSelectedNodeId),
+    'welcome-email': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('👋', 'Welcome', '#d32f2f', data, id, setSelectedNodeId, selected),
 
-    'newsletter-email': ({ data, id, ...rest }) =>
-      createNodeComponent('📧', 'Newsletter', '#d32f2f', data, id, setSelectedNodeId),
+    'newsletter-email': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('📧', 'Newsletter', '#d32f2f', data, id, setSelectedNodeId, selected),
 
-    'follow-up-email': ({ data, id, ...rest }) =>
-      createNodeComponent('🔄', 'Follow-up', '#d32f2f', data, id, setSelectedNodeId),
+    'follow-up-email': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🔄', 'Follow-up', '#d32f2f', data, id, setSelectedNodeId, selected),
 
-    'cta-config': ({ data, id, ...rest }) =>
-      createNodeComponent('🎯', 'CTA', '#e91e63', data, id, setSelectedNodeId),
+    'cta-config': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🎯', 'CTA', '#e91e63', data, id, setSelectedNodeId, selected),
 
-    'url-config': ({ data, id, ...rest }) =>
-      createNodeComponent('🔗', 'URL', '#795548', data, id, setSelectedNodeId),
+    'url-config': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🔗', 'URL', '#795548', data, id, setSelectedNodeId, selected),
 
     // Flow Control Nodes
-    'split-node': ({ data, id, ...rest }) =>
-      createNodeComponent('🔀', 'Split', '#4caf50', data, id, setSelectedNodeId),
+    'split-node': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🔀', 'Split', '#4caf50', data, id, setSelectedNodeId, selected),
 
-    'merge-node': ({ data, id, ...rest }) =>
-      createNodeComponent('🔗', 'Merge', '#4caf50', data, id, setSelectedNodeId),
+    'merge-node': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🔗', 'Merge', '#4caf50', data, id, setSelectedNodeId, selected),
 
-    're-entry-rule': ({ data, id, ...rest }) =>
-      createNodeComponent('🔄', 'Re-entry', '#ff9800', data, id, setSelectedNodeId),
+    're-entry-rule': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🔄', 'Re-entry', '#ff9800', data, id, setSelectedNodeId, selected),
 
-    'end-node': ({ data, id, ...rest }) =>
-      createNodeComponent('🏁', 'End', '#607d8b', data, id, setSelectedNodeId),
+    'end-node': ({ data, id, selected, ...rest }) =>
+      createNodeComponent('🏁', 'End', '#607d8b', data, id, setSelectedNodeId, selected),
   };
 };
 
@@ -362,6 +366,26 @@ function App() {
     });
   };
 
+  const deleteSelectedNode = () => {
+    if (!selectedNodeId) return;
+
+    if (window.confirm('Are you sure you want to delete this node?')) {
+      // Remove the node
+      setNodes(nodes.filter(node => node.id !== selectedNodeId));
+
+      // Remove all edges connected to this node
+      setEdges(edges.filter(edge =>
+        edge.source !== selectedNodeId && edge.target !== selectedNodeId
+      ));
+
+      // Clear selection
+      setSelectedNodeId(null);
+
+      // Show success message
+      console.log('Node deleted successfully');
+    }
+  };
+
   // Auto-layout functions
   const applyAutoLayout = useCallback((layout = layoutType) => {
     if (nodes.length === 0) return;
@@ -510,18 +534,25 @@ function App() {
     }
   }, [nodes.length, applyAutoLayout]);
 
-  // Keyboard shortcut for auto-layout (Ctrl/Cmd + L)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Auto-layout shortcut (Ctrl/Cmd + L)
       if ((event.ctrlKey || event.metaKey) && event.key === 'l') {
         event.preventDefault();
         applyAutoLayout();
+      }
+
+      // Delete selected node shortcut (Delete or Backspace)
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeId) {
+        event.preventDefault();
+        deleteSelectedNode();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [applyAutoLayout]);
+  }, [applyAutoLayout, selectedNodeId]);
 
   return (
     <ReactFlowProvider>
@@ -554,6 +585,11 @@ function App() {
               onConnectEnd={onConnectEnd}
               fitView
               onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+              onNodeContextMenu={(event, node) => {
+                event.preventDefault();
+                setSelectedNodeId(node.id);
+                // Show context menu or just select the node
+              }}
               connectionLineType={ConnectionLineType.SmoothStep}
               connectionLineStyle={{ stroke: '#2a8af6', strokeWidth: 3 }}
               nodesDraggable={true}
@@ -595,6 +631,7 @@ function App() {
                 setNodes(nds => nds.map(n => n.id === selectedNodeId ? { ...n, data: { ...n.data, ...updatedData } } : n));
               }}
               onClose={() => setSelectedNodeId(null)}
+              onDelete={deleteSelectedNode}
             />
           )}
         </div>
@@ -777,9 +814,22 @@ function App() {
             backgroundColor: '#f0f8ff',
             padding: '8px',
             borderRadius: '4px',
-            border: '1px solid #007aff'
+            border: '1px solid #007aff',
+            marginTop: '12px'
           }}>
             ✅ Visual workflows are stored separately from JsonLogic rules. Both are maintained for editing and execution.
+          </div>
+
+          <div style={{
+            fontSize: '10px',
+            color: '#888',
+            backgroundColor: '#f9f9f9',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            border: '1px solid #e0e0e0',
+            marginTop: '8px'
+          }}>
+            💡 <strong>Tip:</strong> Click a node to select it, then press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to remove it. You can also use the "Delete Node" button in the properties panel.
           </div>
         </div>
       </div>
