@@ -247,8 +247,10 @@ export class WorkflowExecutor {
 
     try {
       const delay = rule.delay;
-      let delayHours = 0;
+      const scheduledAt = new Date();
 
+      // Calculate delay hours
+      let delayHours = 0;
       if (delay.type === 'fixed') {
         delayHours = delay.hours || 0;
       } else if (delay.type === 'random') {
@@ -257,21 +259,32 @@ export class WorkflowExecutor {
         delayHours = Math.random() * (maxHours - minHours) + minHours;
       }
 
-      // In a real implementation, you would schedule this delay
-      // For now, we'll just log it
-      this.logger.log(`Delay scheduled: ${delayHours} hours for execution ${executionId}`);
+      // Calculate execution time
+      const executeAt = new Date(scheduledAt.getTime() + (delayHours * 60 * 60 * 1000));
 
-      step.result = { delayHours, delayType: delay.type };
+      // Create enhanced delay result with timing information
+      const delayResult = {
+        execute: false, // CRITICAL: This stops workflow execution
+        workflowSuspended: true, // Indicates workflow should be suspended
+        delay: {
+          type: delay.type,
+          hours: delayHours,
+          scheduledAt: scheduledAt.toISOString(),
+          executeAt: executeAt.toISOString(),
+          workflowId: context.metadata?.workflowId || 0,
+          executionId: executionId,
+          userId: context.metadata?.userId || 'unknown',
+          status: 'pending'
+        }
+      };
+
+      this.logger.log(`Workflow suspended: ${delayHours} hours delay for execution ${executionId}, resume at ${executeAt.toISOString()}`);
+
+      step.result = delayResult;
       step.status = 'completed';
       step.endTime = Date.now();
 
-      return {
-        execute: true,
-        delay: {
-          hours: delayHours,
-          type: delay.type
-        }
-      };
+      return delayResult;
     } catch (error) {
       step.error = error.message;
       step.status = 'failed';
@@ -359,14 +372,21 @@ export class WorkflowExecutor {
           continue;
         }
         const result = await this.executeRuleRecursively(operand, context, steps, executionId);
+
+        // Check if workflow is suspended (delay encountered)
+        if (result && typeof result === 'object' && result.workflowSuspended) {
+          this.logger.log(`Workflow suspended at delay, stopping ${operator} operation`);
+          return result; // Return the suspension result immediately
+        }
+
         results.push(result);
       }
 
       let finalResult;
       if (operator === 'and') {
-        finalResult = results.every(r => r);
+        finalResult = results.every(r => r && r !== false);
       } else {
-        finalResult = results.some(r => r);
+        finalResult = results.some(r => r && r !== false);
       }
 
       step.result = { operator, results, finalResult };

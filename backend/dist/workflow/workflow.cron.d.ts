@@ -7,6 +7,7 @@ export declare class WorkflowCron {
     private executionHistory;
     constructor(workflowService: WorkflowService, workflowExecutor: WorkflowExecutor);
     handleCron(): Promise<void>;
+    private processDelayedExecutions;
     getCronStatus(): {
         isRunning: boolean;
         lastExecutionTime: Date | null;

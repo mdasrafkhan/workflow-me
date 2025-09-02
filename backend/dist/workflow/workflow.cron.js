@@ -73,6 +73,7 @@ let WorkflowCron = class WorkflowCron {
                 errorCount++;
             }
         }
+        await this.processDelayedExecutions();
         const executionTime = Date.now() - startTime;
         this.lastExecutionTime = new Date();
         this.executionHistory.push({
@@ -86,6 +87,11 @@ let WorkflowCron = class WorkflowCron {
             this.executionHistory = this.executionHistory.slice(-10);
         }
         console.log(`Cron job completed: ${workflows.length} workflows processed, ${successCount} successful, ${errorCount} errors, ${executionTime}ms`);
+    }
+    async processDelayedExecutions() {
+        const now = new Date();
+        console.log(`Checking for delayed executions ready at ${now.toISOString()}`);
+        console.log('Delayed execution processing would happen here');
     }
     getCronStatus() {
         const now = new Date();

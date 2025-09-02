@@ -161,6 +161,7 @@ let WorkflowExecutor = WorkflowExecutor_1 = class WorkflowExecutor {
         }
     }
     async executeDelayRule(rule, context, steps, executionId) {
+        var _a, _b;
         const step = {
             id: this.generateStepId(),
             type: 'delay',
@@ -171,6 +172,7 @@ let WorkflowExecutor = WorkflowExecutor_1 = class WorkflowExecutor {
         steps.push(step);
         try {
             const delay = rule.delay;
+            const scheduledAt = new Date();
             let delayHours = 0;
             if (delay.type === 'fixed') {
                 delayHours = delay.hours || 0;
@@ -180,17 +182,26 @@ let WorkflowExecutor = WorkflowExecutor_1 = class WorkflowExecutor {
                 const maxHours = delay.max_hours || minHours;
                 delayHours = Math.random() * (maxHours - minHours) + minHours;
             }
-            this.logger.log(`Delay scheduled: ${delayHours} hours for execution ${executionId}`);
-            step.result = { delayHours, delayType: delay.type };
-            step.status = 'completed';
-            step.endTime = Date.now();
-            return {
-                execute: true,
+            const executeAt = new Date(scheduledAt.getTime() + (delayHours * 60 * 60 * 1000));
+            const delayResult = {
+                execute: false,
+                workflowSuspended: true,
                 delay: {
+                    type: delay.type,
                     hours: delayHours,
-                    type: delay.type
+                    scheduledAt: scheduledAt.toISOString(),
+                    executeAt: executeAt.toISOString(),
+                    workflowId: ((_a = context.metadata) === null || _a === void 0 ? void 0 : _a.workflowId) || 0,
+                    executionId: executionId,
+                    userId: ((_b = context.metadata) === null || _b === void 0 ? void 0 : _b.userId) || 'unknown',
+                    status: 'pending'
                 }
             };
+            this.logger.log(`Workflow suspended: ${delayHours} hours delay for execution ${executionId}, resume at ${executeAt.toISOString()}`);
+            step.result = delayResult;
+            step.status = 'completed';
+            step.endTime = Date.now();
+            return delayResult;
         }
         catch (error) {
             step.error = error.message;
@@ -252,14 +263,18 @@ let WorkflowExecutor = WorkflowExecutor_1 = class WorkflowExecutor {
                     continue;
                 }
                 const result = await this.executeRuleRecursively(operand, context, steps, executionId);
+                if (result && typeof result === 'object' && result.workflowSuspended) {
+                    this.logger.log(`Workflow suspended at delay, stopping ${operator} operation`);
+                    return result;
+                }
                 results.push(result);
             }
             let finalResult;
             if (operator === 'and') {
-                finalResult = results.every(r => r);
+                finalResult = results.every(r => r && r !== false);
             }
             else {
-                finalResult = results.some(r => r);
+                finalResult = results.some(r => r && r !== false);
             }
             step.result = { operator, results, finalResult };
             step.status = 'completed';

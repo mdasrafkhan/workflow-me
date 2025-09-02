@@ -64,6 +64,7 @@ export class WorkflowCron {
     const jsonLogicTest = this.workflowExecutor.testJsonLogic();
     console.log(`JsonLogic test result: ${jsonLogicTest}`);
 
+    // Process immediate workflows
     const workflows = await this.workflowService.findAllWithJsonLogic();
     let successCount = 0;
     let errorCount = 0;
@@ -78,6 +79,9 @@ export class WorkflowCron {
         errorCount++;
       }
     }
+
+    // Process delayed executions (in a real implementation, you'd query the database)
+    await this.processDelayedExecutions();
 
     // Record execution statistics
     const executionTime = Date.now() - startTime;
@@ -96,6 +100,22 @@ export class WorkflowCron {
     }
 
     console.log(`Cron job completed: ${workflows.length} workflows processed, ${successCount} successful, ${errorCount} errors, ${executionTime}ms`);
+  }
+
+  /**
+   * Process delayed executions that are ready to run
+   */
+  private async processDelayedExecutions(): Promise<void> {
+    const now = new Date();
+    console.log(`Checking for delayed executions ready at ${now.toISOString()}`);
+
+    // In a real implementation, you would:
+    // 1. Query the database for pending delays where executeAt <= now
+    // 2. Execute each delayed workflow step
+    // 3. Mark delays as executed
+
+    // For now, just log that we're checking
+    console.log('Delayed execution processing would happen here');
   }
 
   /**
