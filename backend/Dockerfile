@@ -14,6 +14,9 @@ RUN npm install
 # Copy source code (excluding node_modules via .dockerignore)
 COPY . .
 
+# Run tests before starting the server
+RUN npm test
+
 # Expose port
 EXPOSE 4000
 

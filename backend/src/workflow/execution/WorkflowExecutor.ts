@@ -136,6 +136,14 @@ export class WorkflowExecutor {
       return this.executeLogicalRule(rule, context, steps, executionId);
     } else if (rule.parallel) {
       return this.executeParallelRule(rule, context, steps, executionId);
+    } else if (rule.always !== undefined) {
+      return this.executeAlwaysRule(rule, context, steps, executionId);
+    } else if (rule.end !== undefined) {
+      return this.executeEndRule(rule, context, steps, executionId);
+    } else if (rule.split) {
+      return this.executeSplitRule(rule, context, steps, executionId);
+    } else if (rule.url) {
+      return this.executeUrlRule(rule, context, steps, executionId);
     } else {
       // Use standard JsonLogic for other operations
       return this.executeStandardJsonLogic(rule, context, steps, executionId);
@@ -632,7 +640,7 @@ export class WorkflowExecutor {
   /**
    * Test method to verify JsonLogic is working
    */
-  public testJsonLogic(): boolean {
+  public async testJsonLogic(): Promise<boolean> {
     try {
       this.logger.log('Testing JsonLogic import...');
 
@@ -646,27 +654,263 @@ export class WorkflowExecutor {
         return false;
       }
 
-      // Test with a simple rule
+      // Test with a simple standard JsonLogic rule
       const testRule = { "==": [1, 1] };
       const testData = {};
       const result = jsonLogic.apply(testRule, testData);
 
-      this.logger.log(`JsonLogic test result: ${result}`);
+      this.logger.log(`Standard JsonLogic test result: ${result}`);
 
-      // Test with a more complex rule similar to what we generate
+      // Test with our custom execution engine using a complex rule
       const complexRule = {
         "trigger": "subscription",
         "event": "user_buys_subscription",
         "execute": true
       };
 
-      const complexResult = jsonLogic.apply(complexRule, testData);
-      this.logger.log(`Complex JsonLogic test result: ${complexResult}`);
+      const context = {
+        data: {
+          subscription_package: "premium",
+          user_id: "test-user"
+        },
+        metadata: {
+          source: 'test',
+          timestamp: new Date(),
+          userId: 'test-user'
+        }
+      };
 
-      return result === true;
+      // Use our custom execution engine instead of standard JsonLogic
+      const complexResult = await this.executeRuleRecursively(complexRule, context, [], 'test-execution');
+      this.logger.log(`Custom execution engine test result: ${JSON.stringify(complexResult)}`);
+
+      // Test with the user's workflow that contains 'always' operation
+      const userWorkflowRule = {
+        "if": [
+          {
+            "trigger": "subscription",
+            "event": "user_buys_subscription",
+            "execute": true
+          },
+          {
+            "and": [
+              {
+                "always": true
+              },
+              {
+                "delay": {
+                  "hours": 168,
+                  "type": "fixed"
+                }
+              },
+              {
+                "action": "send_email",
+                "template": "welcome_basic",
+                "subject": "Welcome to our service!",
+                "type": "welcome"
+              },
+              {
+                "split": {
+                  "type": "conditional",
+                  "execute": true
+                }
+              },
+              {
+                "url": {
+                  "type": "admin",
+                  "value": "www.google.com"
+                }
+              },
+              {
+                "end": true
+              }
+            ]
+          },
+          {
+            "always": false
+          }
+        ]
+      };
+
+      const userWorkflowResult = await this.executeRuleRecursively(userWorkflowRule, context, [], 'test-user-workflow');
+      this.logger.log(`User workflow test result: ${JSON.stringify(userWorkflowResult)}`);
+
+      return result === true && complexResult !== undefined && userWorkflowResult !== undefined;
     } catch (error) {
       this.logger.error(`JsonLogic test failed: ${error.message}`, error.stack);
       return false;
+    }
+  }
+
+  /**
+   * Execute always rules - always returns true or false
+   */
+  private async executeAlwaysRule(
+    rule: any,
+    context: WorkflowExecutionContext,
+    steps: ExecutionStep[],
+    executionId: string
+  ): Promise<any> {
+    const step: ExecutionStep = {
+      id: this.generateStepId(),
+      type: 'always',
+      rule,
+      startTime: Date.now(),
+      status: 'running'
+    };
+
+    steps.push(step);
+
+    try {
+      const result = {
+        execute: rule.always,
+        always: rule.always
+      };
+
+      step.result = result;
+      step.status = 'completed';
+      step.endTime = Date.now();
+
+      this.logger.log(`Always rule executed: ${rule.always} for execution ${executionId}`);
+      return result;
+    } catch (error) {
+      step.error = error.message;
+      step.status = 'failed';
+      step.endTime = Date.now();
+      throw error;
+    }
+  }
+
+  /**
+   * Execute end rules - terminates workflow execution
+   */
+  private async executeEndRule(
+    rule: any,
+    context: WorkflowExecutionContext,
+    steps: ExecutionStep[],
+    executionId: string
+  ): Promise<any> {
+    const step: ExecutionStep = {
+      id: this.generateStepId(),
+      type: 'end',
+      rule,
+      startTime: Date.now(),
+      status: 'running'
+    };
+
+    steps.push(step);
+
+    try {
+      const result = {
+        execute: false,
+        end: true,
+        workflowTerminated: true
+      };
+
+      step.result = result;
+      step.status = 'completed';
+      step.endTime = Date.now();
+
+      this.logger.log(`End rule executed - workflow terminated for execution ${executionId}`);
+      return result;
+    } catch (error) {
+      step.error = error.message;
+      step.status = 'failed';
+      step.endTime = Date.now();
+      throw error;
+    }
+  }
+
+  /**
+   * Execute split rules - conditional branching
+   */
+  private async executeSplitRule(
+    rule: any,
+    context: WorkflowExecutionContext,
+    steps: ExecutionStep[],
+    executionId: string
+  ): Promise<any> {
+    const step: ExecutionStep = {
+      id: this.generateStepId(),
+      type: 'split',
+      rule,
+      startTime: Date.now(),
+      status: 'running'
+    };
+
+    steps.push(step);
+
+    try {
+      const split = rule.split;
+      let shouldExecute = false;
+
+      if (split.type === 'conditional') {
+        // For conditional splits, check if execute is true
+        shouldExecute = split.execute === true;
+      }
+
+      const result = {
+        execute: shouldExecute,
+        split: {
+          type: split.type,
+          execute: shouldExecute
+        }
+      };
+
+      step.result = result;
+      step.status = 'completed';
+      step.endTime = Date.now();
+
+      this.logger.log(`Split rule executed: ${shouldExecute} for execution ${executionId}`);
+      return result;
+    } catch (error) {
+      step.error = error.message;
+      step.status = 'failed';
+      step.endTime = Date.now();
+      throw error;
+    }
+  }
+
+  /**
+   * Execute URL rules - URL configuration
+   */
+  private async executeUrlRule(
+    rule: any,
+    context: WorkflowExecutionContext,
+    steps: ExecutionStep[],
+    executionId: string
+  ): Promise<any> {
+    const step: ExecutionStep = {
+      id: this.generateStepId(),
+      type: 'url',
+      rule,
+      startTime: Date.now(),
+      status: 'running'
+    };
+
+    steps.push(step);
+
+    try {
+      const url = rule.url;
+      const result = {
+        execute: true,
+        url: {
+          type: url.type,
+          value: url.value
+        }
+      };
+
+      step.result = result;
+      step.status = 'completed';
+      step.endTime = Date.now();
+
+      this.logger.log(`URL rule executed: ${url.value} for execution ${executionId}`);
+      return result;
+    } catch (error) {
+      step.error = error.message;
+      step.status = 'failed';
+      step.endTime = Date.now();
+      throw error;
     }
   }
 }

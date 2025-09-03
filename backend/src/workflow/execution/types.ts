@@ -15,7 +15,7 @@ export interface WorkflowExecutionContext {
 
 export interface ExecutionStep {
   id: string;
-  type: 'trigger' | 'action' | 'delay' | 'conditional' | 'logical' | 'parallel' | 'jsonlogic';
+  type: 'trigger' | 'action' | 'delay' | 'conditional' | 'logical' | 'parallel' | 'jsonlogic' | 'always' | 'end' | 'split' | 'url';
   rule: any;
   startTime: number;
   endTime?: number;

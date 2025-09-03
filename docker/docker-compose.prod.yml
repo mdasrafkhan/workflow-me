@@ -3,15 +3,15 @@ services:
     image: postgres:15-alpine
     container_name: workflow-db-prod
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-workflow_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workflow_password}
-      POSTGRES_DB: ${POSTGRES_DB:-workflow_db}
+      POSTGRES_USER: workflow_user
+      POSTGRES_PASSWORD: workflow_password
+      POSTGRES_DB: workflow_db
     ports:
       - "15432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_prod:/var/lib/postgresql/data
     networks:
-      - workflow-network-prod
+      - workflow-network
     restart: unless-stopped
 
   frontend:
@@ -20,9 +20,9 @@ services:
       dockerfile: Dockerfile.prod
     container_name: workflow-frontend-prod
     ports:
-      - "3000:3000"
+      - "3000:80"
     networks:
-      - workflow-network-prod
+      - workflow-network
     restart: unless-stopped
     depends_on:
       - backend
@@ -36,19 +36,19 @@ services:
       - postgres
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_USER: ${POSTGRES_USER:-workflow_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workflow_password}
-      POSTGRES_DB: ${POSTGRES_DB:-workflow_db}
+      POSTGRES_USER: workflow_user
+      POSTGRES_PASSWORD: workflow_password
+      POSTGRES_DB: workflow_db
       NODE_ENV: production
     ports:
       - "4000:4000"
     networks:
-      - workflow-network-prod
+      - workflow-network
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  postgres_data_prod:
 
 networks:
-  workflow-network-prod:
+  workflow-network:
     driver: bridge

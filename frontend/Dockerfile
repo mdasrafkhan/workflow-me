@@ -11,6 +11,9 @@ RUN npm install
 # Copy source code (excluding node_modules via .dockerignore)
 COPY . .
 
+# Run tests before starting the app
+RUN npm test -- --watchAll=false --passWithNoTests
+
 # Expose port
 EXPOSE 3000
 

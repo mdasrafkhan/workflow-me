@@ -187,7 +187,7 @@ function App() {
   const [workflows, setWorkflows] = useState([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [layoutType, setLayoutType] = useState("vertical"); // 'hierarchical', 'horizontal', 'vertical'
+  // Layout functionality removed - nodes now auto-align horizontally
   const [jsonLogicRule, setJsonLogicRule] = useState(null);
   const [showJsonLogic, setShowJsonLogic] = useState(false);
   const reactFlowWrapper = useRef(null);
@@ -292,16 +292,33 @@ function App() {
       }
 
       try {
-        const reactFlowBounds =
-          reactFlowWrapper.current.getBoundingClientRect();
-
-        // Calculate position relative to the React Flow pane
-        const position = reactFlowInstance.project({
-          x: event.clientX - reactFlowBounds.left,
-          y: event.clientY - reactFlowBounds.top,
-        });
-
         const newNodeId = uuidv4();
+
+        // Calculate horizontal alignment position
+        const nodeWidth = 148; // Standard node width
+        const horizontalSpacing = 200; // Space between nodes
+
+        // Calculate the workflow's horizontal alignment line
+        let baseY = 0; // Default Y position
+        if (nodes.length > 0) {
+          // Use the Y position of existing nodes to maintain horizontal alignment
+          // If nodes are already aligned horizontally, use their Y position
+          // If they're not aligned, use the Y position of the first node
+          const existingYPositions = nodes.map(node => node.position.y);
+          const isHorizontallyAligned = existingYPositions.every(y => Math.abs(y - existingYPositions[0]) < 10);
+
+          if (isHorizontallyAligned) {
+            // Use the existing horizontal line
+            baseY = existingYPositions[0];
+          } else {
+            // Use the Y position of the first node to start a new horizontal line
+            baseY = nodes[0].position.y;
+          }
+        }
+
+        // Calculate X position based on number of existing nodes
+        const xPosition = nodes.length * horizontalSpacing;
+        const position = { x: xPosition, y: baseY };
 
         // Get node type configuration to set proper data
         const nodeType = NodeRegistry.getNodeType(type);
@@ -513,58 +530,7 @@ function App() {
     }
   };
 
-  // Auto-layout functions
-  const applyAutoLayout = useCallback(
-    (layout = layoutType) => {
-      if (nodes.length === 0) return;
-
-      const nodeWidth = 140; // Node width + spacing
-      const nodeHeight = 100; // Node height + spacing
-      const horizontalSpacing = 200;
-      const verticalSpacing = 150;
-
-      let newNodes = [...nodes];
-
-      switch (layout) {
-        case "hierarchical":
-          newNodes = applyHierarchicalLayout(
-            nodes,
-            edges,
-            nodeWidth,
-            nodeHeight,
-            horizontalSpacing,
-            verticalSpacing
-          );
-          break;
-        case "horizontal":
-          newNodes = applyHorizontalLayout(nodes, nodeWidth, horizontalSpacing);
-          break;
-        case "vertical":
-          newNodes = applyVerticalLayout(nodes, nodeHeight, verticalSpacing);
-          break;
-        default:
-          newNodes = applyHierarchicalLayout(
-            nodes,
-            edges,
-            nodeWidth,
-            nodeHeight,
-            horizontalSpacing,
-            verticalSpacing
-          );
-      }
-
-      setNodes(newNodes);
-
-      // Fit the view to show all nodes after layout
-      setTimeout(() => {
-        if (reactFlowInstance) {
-          reactFlowInstance.fitView({ padding: 0.1 });
-        }
-      }, 100);
-    },
-    [nodes, edges, layoutType, reactFlowInstance]
-  );
-
+  // Layout functions removed - nodes now auto-align horizontally when dropped
   const applyHierarchicalLayout = (
     nodes,
     edges,
@@ -663,39 +629,13 @@ function App() {
     }));
   };
 
-  const cycleLayoutType = () => {
-    const types = ["hierarchical", "horizontal", "vertical"];
-    const currentIndex = types.indexOf(layoutType);
-    const nextType = types[(currentIndex + 1) % types.length];
-    setLayoutType(nextType);
-    applyAutoLayout(nextType);
-  };
+  // cycleLayoutType function removed - layout functionality no longer needed
 
-  // Auto-apply vertical layout when nodes are added (but not when manually moved)
-  useEffect(() => {
-    if (nodes.length > 0 && nodes.length <= 10) {
-      // Only auto-layout for small workflows
-      const hasManualPositions = nodes.some(
-        (node) =>
-          Math.abs(node.position.x) > 50 || Math.abs(node.position.y) > 50
-      );
-
-      if (!hasManualPositions) {
-        // Small delay to ensure nodes are rendered, always use vertical layout
-        setTimeout(() => applyAutoLayout("vertical"), 100);
-      }
-    }
-  }, [nodes.length, applyAutoLayout]);
+  // Auto-alignment is now handled directly in onDrop function
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Auto-layout shortcut (Ctrl/Cmd + L) - always applies vertical layout
-      if ((event.ctrlKey || event.metaKey) && event.key === "l") {
-        event.preventDefault();
-        applyAutoLayout("vertical");
-      }
-
       // Delete selected node shortcut (Delete or Backspace)
       if (
         (event.key === "Delete" || event.key === "Backspace") &&
@@ -708,7 +648,7 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [applyAutoLayout, selectedNodeId]);
+  }, [selectedNodeId]);
 
   return (
     <ReactFlowProvider>
@@ -950,17 +890,7 @@ function App() {
               </div>
             </div>
 
-            <div className="layout-controls">
-              <h3>Layout</h3>
-              <button onClick={cycleLayoutType}>
-                🔄 {layoutType.charAt(0).toUpperCase() + layoutType.slice(1)}
-              </button>
-              <div
-                style={{ fontSize: "10px", color: "#999", textAlign: "center" }}
-              >
-                Shortcut: Ctrl/Cmd + L
-              </div>
-            </div>
+
 
             <div className="jsonlogic-controls">
               <h3>JsonLogic</h3>

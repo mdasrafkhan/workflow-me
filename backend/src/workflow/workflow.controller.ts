@@ -41,8 +41,8 @@ export class WorkflowController {
 
 
   @Get('test/jsonlogic')
-  testJsonLogic(): { success: boolean; message: string } {
-    const result = this.workflowExecutor.testJsonLogic();
+  async testJsonLogic(): Promise<{ success: boolean; message: string }> {
+    const result = await this.workflowExecutor.testJsonLogic();
     return {
       success: result,
       message: result ? 'JsonLogic is working correctly' : 'JsonLogic test failed'
