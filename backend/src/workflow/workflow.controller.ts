@@ -38,10 +38,7 @@ export class WorkflowController {
     return this.workflowService.remove(Number(id));
   }
 
-  @Post('migrate')
-  async migrateOldWorkflows(): Promise<{ migrated: number; message: string }> {
-    return this.workflowService.migrateOldWorkflows();
-  }
+
 
   @Get('test/jsonlogic')
   testJsonLogic(): { success: boolean; message: string } {

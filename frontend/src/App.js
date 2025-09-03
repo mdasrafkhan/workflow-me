@@ -23,6 +23,7 @@ import { NodeRegistry } from "./core/NodeRegistry";
 import { JsonLogicConverter } from "./core/JsonLogicConverter";
 import { WorkflowValidator } from "./core/WorkflowValidator";
 import { WorkflowTemplates } from "./core/WorkflowTemplates";
+import WorkflowToJsonLogicConverter from "./utils/workflowToJsonLogic";
 import "./App.css";
 
 const initialNodes = [];
@@ -143,15 +144,15 @@ const createNodeTypes = (setSelectedNodeId) => {
       })()}
       <Handle
         type="source"
-        position="right"
-        id="right"
+        position="bottom"
+        id="bottom"
         style={createHandleStyle(color)}
         isConnectable={true}
       />
       <Handle
         type="target"
-        position="left"
-        id="left"
+        position="top"
+        id="top"
         style={createHandleStyle(color)}
         isConnectable={true}
       />
@@ -186,7 +187,7 @@ function App() {
   const [workflows, setWorkflows] = useState([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [layoutType, setLayoutType] = useState("hierarchical"); // 'hierarchical', 'horizontal', 'vertical'
+  const [layoutType, setLayoutType] = useState("vertical"); // 'hierarchical', 'horizontal', 'vertical'
   const [jsonLogicRule, setJsonLogicRule] = useState(null);
   const [showJsonLogic, setShowJsonLogic] = useState(false);
   const reactFlowWrapper = useRef(null);
@@ -438,12 +439,28 @@ function App() {
     alert(summary);
   };
 
-  const loadTemplate = (templateId) => {
+    const loadTemplate = (templateId) => {
     try {
       const workflow = WorkflowTemplates.createWorkflowFromTemplate(templateId);
-      setNodes(workflow.nodes);
+
+      // Apply vertical layout directly to the template nodes
+      const nodeHeight = 100;
+      const verticalSpacing = 150;
+      const startY = 100;
+      const centerOffset = ((workflow.nodes.length - 1) * verticalSpacing) / 2;
+
+      const verticalNodes = workflow.nodes.map((node, index) => ({
+        ...node,
+        position: {
+          x: 300, // Center horizontally
+          y: startY + index * verticalSpacing - centerOffset,
+        },
+      }));
+
+      setNodes(verticalNodes);
       setEdges(workflow.edges);
       setSelectedWorkflow(null); // Clear selected workflow
+
       alert(`Loaded template: ${workflow.name}`);
     } catch (error) {
       alert(`Failed to load template: ${error.message}`);
@@ -654,7 +671,7 @@ function App() {
     applyAutoLayout(nextType);
   };
 
-  // Auto-apply layout when nodes are added (but not when manually moved)
+  // Auto-apply vertical layout when nodes are added (but not when manually moved)
   useEffect(() => {
     if (nodes.length > 0 && nodes.length <= 10) {
       // Only auto-layout for small workflows
@@ -664,8 +681,8 @@ function App() {
       );
 
       if (!hasManualPositions) {
-        // Small delay to ensure nodes are rendered
-        setTimeout(() => applyAutoLayout(), 100);
+        // Small delay to ensure nodes are rendered, always use vertical layout
+        setTimeout(() => applyAutoLayout("vertical"), 100);
       }
     }
   }, [nodes.length, applyAutoLayout]);
@@ -673,10 +690,10 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
-      // Auto-layout shortcut (Ctrl/Cmd + L)
+      // Auto-layout shortcut (Ctrl/Cmd + L) - always applies vertical layout
       if ((event.ctrlKey || event.metaKey) && event.key === "l") {
         event.preventDefault();
-        applyAutoLayout();
+        applyAutoLayout("vertical");
       }
 
       // Delete selected node shortcut (Delete or Backspace)
@@ -811,30 +828,7 @@ function App() {
               >
                 Validate
               </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const response = await axios.post("/api/workflows/migrate");
-                    alert(response.data.message);
-                    const workflowsResponse = await axios.get("/api/workflows");
-                    setWorkflows(workflowsResponse.data);
-                  } catch (error) {
-                    alert("Migration failed: " + error.message);
-                  }
-                }}
-                style={{
-                  backgroundColor: "#34c759",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 16px",
-                  borderRadius: "8px",
-                  fontSize: "14px",
-                  fontWeight: "500",
-                  cursor: "pointer",
-                }}
-              >
-                🔄 Migrate
-              </button>
+
             </div>
 
             <div className="workflow-management">
@@ -958,7 +952,6 @@ function App() {
 
             <div className="layout-controls">
               <h3>Layout</h3>
-              <button onClick={applyAutoLayout}>📐 Apply Layout</button>
               <button onClick={cycleLayoutType}>
                 🔄 {layoutType.charAt(0).toUpperCase() + layoutType.slice(1)}
               </button>

@@ -98,48 +98,5 @@ export class WorkflowService {
       }));
   }
 
-  // Migrate old workflows to new structure
-  async migrateOldWorkflows(): Promise<{ migrated: number; message: string }> {
-    try {
-      // Get old workflows from the legacy table
-      const oldWorkflows = await this.visualWorkflowRepo.manager.query(
-        'SELECT id, name, "jsonLogic" FROM workflow WHERE "jsonLogic" IS NOT NULL'
-      );
 
-      let migrated = 0;
-      for (const oldWf of oldWorkflows) {
-        // Check if already migrated
-        const existing = await this.visualWorkflowRepo.findOne({
-          where: { name: oldWf.name }
-        });
-
-        if (!existing) {
-          // Create new visual workflow with JsonLogic
-          const visualWorkflow = this.visualWorkflowRepo.create({
-            name: oldWf.name,
-            nodes: [], // Empty nodes for migrated workflows
-            edges: []  // Empty edges for migrated workflows
-          });
-
-          // Create JsonLogic rule
-          visualWorkflow.jsonLogicRule = this.jsonLogicRuleRepo.create({
-            rule: oldWf.jsonLogic
-          });
-
-          await this.visualWorkflowRepo.save(visualWorkflow);
-          migrated++;
-        }
-      }
-
-      return {
-        migrated,
-        message: `Successfully migrated ${migrated} workflows to new structure`
-      };
-    } catch (error) {
-      return {
-        migrated: 0,
-        message: `Migration failed: ${error.message}`
-      };
-    }
-  }
 }
