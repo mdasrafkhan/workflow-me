@@ -299,6 +299,89 @@ kbd {
   opacity: 0.7;
 }
 
+/* Category header styles for expandable categories */
+.category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 4px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+  margin-bottom: 8px;
+}
+
+.category-header:hover {
+  background-color: rgba(0, 122, 255, 0.05);
+}
+
+.category-header h4 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.expand-icon {
+  font-size: 12px;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.category-content {
+  margin-left: 12px;
+  border-left: 2px solid #e5e5e7;
+  padding-left: 16px;
+}
+
+/* Main category header styles */
+.main-category {
+  margin-bottom: 32px;
+}
+
+.main-header {
+  color: #1d1d1f;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  padding: 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.9;
+  border-bottom: 2px solid #1976d2;
+  padding-bottom: 8px;
+}
+
+/* Subcategory section styles */
+.subcategory-section {
+  margin-bottom: 20px;
+}
+
+.subcategory-header {
+  color: #1976d2;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 8px 0;
+  padding: 4px 4px;
+  background-color: rgba(25, 118, 210, 0.05);
+  border-left: 2px solid #1976d2;
+  padding-left: 8px;
+  border-radius: 3px;
+}
+
+.subcategory-content {
+  margin-left: 12px;
+  border-left: 1px solid #e5e5e7;
+  padding-left: 12px;
+}
+
+
+
 .dndnode {
   display: flex;
   align-items: center;
@@ -313,6 +396,15 @@ kbd {
   transition: all 0.2s ease;
   user-select: none;
   color: #1d1d1f;
+}
+
+.dndnode .icon {
+  margin-right: 8px;
+  font-size: 16px;
+}
+
+.dndnode .label {
+  flex: 1;
 }
 
 .dndnode:hover {
