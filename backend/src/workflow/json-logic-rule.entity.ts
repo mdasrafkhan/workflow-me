@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToOne } from 'typeorm';
 import { VisualWorkflow } from './visual-workflow.entity';
 
-@Entity()
+@Entity('workflow')
 export class JsonLogicRule {
   @PrimaryGeneratedColumn()
   id: number;
