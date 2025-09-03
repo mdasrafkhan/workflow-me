@@ -55,6 +55,15 @@ services:
       - workflow-network
     restart: unless-stopped
 
+  adminer: 
+    image: adminer
+    container_name: workflow-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - workflow-network
+
 volumes:
   postgres_data:
 
