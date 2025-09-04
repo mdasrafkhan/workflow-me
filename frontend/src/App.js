@@ -463,21 +463,99 @@ function App() {
     try {
       const workflow = WorkflowTemplates.createWorkflowFromTemplate(templateId);
 
-      // Apply vertical layout directly to the template nodes
+      // Apply proper tree layout - main flow vertical, branches horizontal
+      const nodeWidth = 200;
       const nodeHeight = 100;
       const verticalSpacing = 150;
+      const horizontalSpacing = 300;
+      const startX = 300;
       const startY = 100;
-      const centerOffset = ((workflow.nodes.length - 1) * verticalSpacing) / 2;
 
-      const verticalNodes = workflow.nodes.map((node, index) => ({
-        ...node,
-        position: {
-          x: 300, // Center horizontally
-          y: startY + index * verticalSpacing - centerOffset,
-        },
-      }));
+      // Create a map to track node positions
+      const nodePositions = new Map();
+      const processedNodes = new Set();
 
-      setNodes(verticalNodes);
+      // Find the root node (no incoming edges)
+      const rootNode = workflow.nodes.find(node =>
+        !workflow.edges.some(edge => edge.target === node.id)
+      );
+
+      if (!rootNode) {
+        throw new Error('No root node found');
+      }
+
+      // Position root node
+      nodePositions.set(rootNode.id, { x: startX, y: startY });
+      processedNodes.add(rootNode.id);
+
+      // Process nodes level by level
+      const queue = [{ node: rootNode, level: 0, parentX: startX }];
+      const levelMap = new Map(); // Track nodes by level
+
+      while (queue.length > 0) {
+        const { node, level, parentX } = queue.shift();
+
+        // Find children of this node
+        const children = workflow.edges
+          .filter(edge => edge.source === node.id)
+          .map(edge => workflow.nodes.find(n => n.id === edge.target))
+          .filter(child => child && !processedNodes.has(child.id));
+
+        if (children.length > 0) {
+          // Check if this is a merge point (multiple parents pointing to same child)
+          const isMergePoint = children.some(child =>
+            workflow.edges.filter(edge => edge.target === child.id).length > 1
+          );
+
+          if (isMergePoint) {
+            // For merge points, position children at the center
+            children.forEach((child, index) => {
+              const childX = startX; // Center all merge children
+              const childY = startY + (level + 1) * verticalSpacing;
+
+              nodePositions.set(child.id, { x: childX, y: childY });
+              processedNodes.add(child.id);
+
+              queue.push({
+                node: child,
+                level: level + 1,
+                parentX: childX
+              });
+            });
+          } else {
+            // For regular branches, position children horizontally
+            const childrenStartX = parentX - ((children.length - 1) * horizontalSpacing) / 2;
+
+            children.forEach((child, index) => {
+              const childX = childrenStartX + index * horizontalSpacing;
+              const childY = startY + (level + 1) * verticalSpacing;
+
+              nodePositions.set(child.id, { x: childX, y: childY });
+              processedNodes.add(child.id);
+
+              queue.push({
+                node: child,
+                level: level + 1,
+                parentX: childX
+              });
+            });
+          }
+        }
+      }
+
+      // Apply positions to all nodes
+      const treeNodes = workflow.nodes.map(node => {
+        const position = nodePositions.get(node.id) || { x: 300, y: 100 };
+        return {
+          ...node,
+          position: {
+            x: position.x,
+            y: position.y,
+          },
+        };
+      });
+
+      setNodes(treeNodes);
       setEdges(workflow.edges);
       setSelectedWorkflow(null); // Clear selected workflow
 
@@ -639,10 +717,16 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Don't delete node if user is typing in input fields
+      const isTypingInInput = event.target.tagName === 'INPUT' ||
+                             event.target.tagName === 'TEXTAREA' ||
+                             event.target.contentEditable === 'true';
+
       // Delete selected node shortcut (Delete or Backspace)
       if (
         (event.key === "Delete" || event.key === "Backspace") &&
-        selectedNodeId
+        selectedNodeId &&
+        !isTypingInInput
       ) {
         event.preventDefault();
         deleteSelectedNode();

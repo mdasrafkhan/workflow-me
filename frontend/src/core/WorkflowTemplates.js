@@ -196,10 +196,12 @@ export function initializeDefaultTemplates() {
       },
       {
         id: 'shared-flow-start',
-        type: 'merge-node',
+        type: 'shared-flow',
         position: { x: 300, y: 350 },
         data: {
-          label: 'Shared Flow Starts Here'
+          label: 'Shared Flow Starts Here',
+          flowName: 'Welcome Follow-up Flow',
+          description: 'All welcome email branches merge into this shared follow-up sequence'
         }
       },
       {

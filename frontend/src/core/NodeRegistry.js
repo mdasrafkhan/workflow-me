@@ -960,6 +960,40 @@ export function initializeDefaultNodeTypes() {
     }),
   });
 
+  NodeRegistry.registerNodeType("shared-flow", {
+    category: "Flow Control",
+    subcategory: "Shared Flow",
+    icon: "🌊",
+    color: "#2196f3",
+    label: "Shared Flow",
+    description: "Shared workflow steps that all branches merge into",
+    properties: [
+      {
+        key: "flowName",
+        type: "text",
+        label: "Flow Name",
+        placeholder: "Enter flow name",
+        required: true,
+        default: "Shared Flow"
+      },
+      {
+        key: "description",
+        type: "text",
+        label: "Description",
+        placeholder: "Describe what happens in this shared flow",
+        required: false,
+        default: "All branches merge into this shared workflow"
+      }
+    ],
+    jsonLogicConverter: (node) => ({
+      sharedFlow: {
+        name: node.data?.flowName || "Shared Flow",
+        description: node.data?.description || "All branches merge into this shared workflow",
+        execute: true,
+      },
+    }),
+  });
+
   NodeRegistry.registerNodeType("re-entry-rule", {
     category: "Flow Control",
     subcategory: "Rules",
