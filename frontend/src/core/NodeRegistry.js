@@ -247,6 +247,138 @@ export function initializeDefaultNodeTypes() {
     },
   });
 
+  // Enhanced product package condition for segmented workflows
+  NodeRegistry.registerNodeType("product-package-condition", {
+    category: "Conditions",
+    subcategory: "Product",
+    icon: "🎯",
+    color: "#d97706",
+    label: "Product Package",
+    description: "Check which specific product package the user subscribed to (supports multiple branches)",
+    properties: [
+      {
+        key: "conditionType",
+        label: "Condition Type",
+        type: "select",
+        options: [
+          { value: "package_1", label: "Product Package 1" },
+          { value: "package_2", label: "Product Package 2" },
+          { value: "all_others", label: "All Other Packages" },
+        ],
+        default: "package_1",
+      },
+      {
+        key: "packageId",
+        label: "Package ID",
+        type: "text",
+        default: "24",
+        description: "The specific package ID to check against",
+      },
+    ],
+    jsonLogicConverter: (node) => {
+      const conditionType = node.data?.conditionType;
+      const packageId = node.data?.packageId;
+
+      if (!conditionType) return { always: true };
+
+      switch (conditionType) {
+        case "package_1":
+          return {
+            "==": [{ var: "subscription_package_id" }, packageId || "24"],
+          };
+        case "package_2":
+          return {
+            "==": [{ var: "subscription_package_id" }, packageId || "128"],
+          };
+        case "all_others":
+          return {
+            "and": [
+              { "!=": [{ var: "subscription_package_id" }, "24"] },
+              { "!=": [{ var: "subscription_package_id" }, "128"] }
+            ]
+          };
+        default:
+          return { always: true };
+      }
+    },
+    validation: (data) => {
+      const errors = [];
+      if (!data.conditionType) {
+        errors.push("Condition type is required");
+      }
+      if (data.conditionType !== "all_others" && !data.packageId) {
+        errors.push("Package ID is required for specific package conditions");
+      }
+      return errors;
+    },
+  });
+
+  // Optimized: Single multi-branch condition node
+  NodeRegistry.registerNodeType("multi-branch-condition", {
+    category: "Conditions",
+    subcategory: "Product",
+    icon: "🔀",
+    color: "#d97706",
+    label: "Multi-Branch Condition",
+    description: "Single node that handles multiple product package conditions with if-else logic",
+    properties: [
+      {
+        key: "package1Id",
+        label: "Package 1 ID",
+        type: "text",
+        default: "24",
+        description: "ID for first product package",
+      },
+      {
+        key: "package2Id",
+        label: "Package 2 ID",
+        type: "text",
+        default: "128",
+        description: "ID for second product package",
+      },
+      {
+        key: "package1Label",
+        label: "Package 1 Label",
+        type: "text",
+        default: "United",
+        description: "Display label for package 1",
+      },
+      {
+        key: "package2Label",
+        label: "Package 2 Label",
+        type: "text",
+        default: "Podcast",
+        description: "Display label for package 2",
+      },
+    ],
+    jsonLogicConverter: (node) => {
+      const package1Id = node.data?.package1Id || "24";
+      const package2Id = node.data?.package2Id || "128";
+
+      // Create a complex if-else condition that handles all three branches
+      return {
+        "if": [
+          { "==": [{ var: "subscription_package_id" }, package1Id] },
+          { "branch": "package_1", "package_id": package1Id },
+          {
+            "if": [
+              { "==": [{ var: "subscription_package_id" }, package2Id] },
+              { "branch": "package_2", "package_id": package2Id },
+              { "branch": "all_others", "package_id": "other" }
+            ]
+          }
+        ]
+      };
+    },
+    validation: (data) => {
+      const errors = [];
+      if (!data.package1Id || !data.package2Id) {
+        errors.push("Both package IDs are required");
+      }
+      return errors;
+    },
+  });
+
   NodeRegistry.registerNodeType("member-type-condition", {
     category: "Conditions",
     subcategory: "User",
@@ -405,6 +537,200 @@ export function initializeDefaultNodeTypes() {
     }),
   });
 
+  // Optimized: Single conditional welcome email node
+  NodeRegistry.registerNodeType("conditional-welcome-email", {
+    category: "Actions",
+    subcategory: "Email",
+    icon: "📧",
+    color: "#d32f2f",
+    label: "Conditional Welcome",
+    description: "Send welcome email with conditional content based on product package",
+    properties: [
+      {
+        key: "package1Subject",
+        label: "Package 1 Subject",
+        type: "text",
+        default: "Welcome to United 🪅 — here's how to get started",
+        description: "Email subject for package 1 (United)",
+      },
+      {
+        key: "package2Subject",
+        label: "Package 2 Subject",
+        type: "text",
+        default: "Welcome to the podcast — here's what you can do first",
+        description: "Email subject for package 2 (Podcast)",
+      },
+      {
+        key: "defaultSubject",
+        label: "Default Subject",
+        type: "text",
+        default: "Welcome! Here's how to get started",
+        description: "Email subject for all other packages",
+      },
+      {
+        key: "package1Template",
+        label: "Package 1 Template",
+        type: "text",
+        default: "united_welcome",
+        description: "Template ID for package 1",
+      },
+      {
+        key: "package2Template",
+        label: "Package 2 Template",
+        type: "text",
+        default: "podcast_welcome",
+        description: "Template ID for package 2",
+      },
+      {
+        key: "defaultTemplate",
+        label: "Default Template",
+        type: "text",
+        default: "generic_welcome",
+        description: "Template ID for all other packages",
+      },
+    ],
+    jsonLogicConverter: (node) => {
+      const package1Subject = node.data?.package1Subject || "Welcome to United 🪅 — here's how to get started";
+      const package2Subject = node.data?.package2Subject || "Welcome to the podcast — here's what you can do first";
+      const defaultSubject = node.data?.defaultSubject || "Welcome! Here's how to get started";
+
+      const package1Template = node.data?.package1Template || "united_welcome";
+      const package2Template = node.data?.package2Template || "podcast_welcome";
+      const defaultTemplate = node.data?.defaultTemplate || "generic_welcome";
+
+      return {
+        action: "send_email",
+        type: "welcome",
+        conditional: {
+          "if": [
+            { "==": [{ var: "subscription_package_id" }, "24"] },
+            {
+              template: package1Template,
+              subject: package1Subject,
+              package_specific: "united"
+            },
+            {
+              "if": [
+                { "==": [{ var: "subscription_package_id" }, "128"] },
+                {
+                  template: package2Template,
+                  subject: package2Subject,
+                  package_specific: "podcast"
+                },
+                {
+                  template: defaultTemplate,
+                  subject: defaultSubject,
+                  package_specific: "generic"
+                }
+              ]
+            }
+          ]
+        }
+      };
+    },
+    validation: (data) => {
+      const errors = [];
+      if (!data.package1Subject || !data.package2Subject || !data.defaultSubject) {
+        errors.push("All email subjects are required");
+      }
+      if (!data.package1Template || !data.package2Template || !data.defaultTemplate) {
+        errors.push("All template IDs are required");
+      }
+      return errors;
+    },
+  });
+
+  // Keep individual nodes for backward compatibility and specific use cases
+  NodeRegistry.registerNodeType("united-welcome-email", {
+    category: "Actions",
+    subcategory: "Email",
+    icon: "🪅",
+    color: "#d32f2f",
+    label: "United Welcome",
+    description: "Send United welcome email with party popper emoji",
+    properties: [
+      {
+        key: "subject",
+        label: "Email Subject",
+        type: "text",
+        default: "Welcome to United 🪅 — here's how to get started",
+      },
+      {
+        key: "templateId",
+        label: "Template ID",
+        type: "text",
+        default: "united_welcome",
+      },
+    ],
+    jsonLogicConverter: (node) => ({
+      action: "send_email",
+      template: node.data?.templateId || "united_welcome",
+      subject: node.data?.subject || "Welcome to United 🪅 — here's how to get started",
+      type: "welcome",
+      package_specific: "united",
+    }),
+  });
+
+  NodeRegistry.registerNodeType("podcast-welcome-email", {
+    category: "Actions",
+    subcategory: "Email",
+    icon: "🎧",
+    color: "#d32f2f",
+    label: "Podcast Welcome",
+    description: "Send podcast welcome email",
+    properties: [
+      {
+        key: "subject",
+        label: "Email Subject",
+        type: "text",
+        default: "Welcome to the podcast — here's what you can do first",
+      },
+      {
+        key: "templateId",
+        label: "Template ID",
+        type: "text",
+        default: "podcast_welcome",
+      },
+    ],
+    jsonLogicConverter: (node) => ({
+      action: "send_email",
+      template: node.data?.templateId || "podcast_welcome",
+      subject: node.data?.subject || "Welcome to the podcast — here's what you can do first",
+      type: "welcome",
+      package_specific: "podcast",
+    }),
+  });
+
+  NodeRegistry.registerNodeType("generic-welcome-email", {
+    category: "Actions",
+    subcategory: "Email",
+    icon: "📧",
+    color: "#d32f2f",
+    label: "Generic Welcome",
+    description: "Send generic welcome email for all other packages",
+    properties: [
+      {
+        key: "subject",
+        label: "Email Subject",
+        type: "text",
+        default: "Welcome! Here's how to get started",
+      },
+      {
+        key: "templateId",
+        label: "Template ID",
+        type: "text",
+        default: "generic_welcome",
+      },
+    ],
+    jsonLogicConverter: (node) => ({
+      action: "send_email",
+      template: node.data?.templateId || "generic_welcome",
+      subject: node.data?.subject || "Welcome! Here's how to get started",
+      type: "welcome",
+      package_specific: "generic",
+    }),
+  });
+
   NodeRegistry.registerNodeType("newsletter-email", {
     category: "Actions",
     subcategory: "Email",
@@ -458,6 +784,67 @@ export function initializeDefaultNodeTypes() {
       template: "follow_up",
       follow_up_type: node.data?.followUpType || "engagement",
       type: "follow_up",
+    }),
+  });
+
+  // Specific follow-up emails for the workflow
+  NodeRegistry.registerNodeType("engagement-nudge-email", {
+    category: "Actions",
+    subcategory: "Email",
+    icon: "💡",
+    color: "#d32f2f",
+    label: "Engagement Nudge",
+    description: "Send engagement nudge with onboarding tips",
+    properties: [
+      {
+        key: "subject",
+        label: "Email Subject",
+        type: "text",
+        default: "Getting started tips and FAQs",
+      },
+      {
+        key: "templateId",
+        label: "Template ID",
+        type: "text",
+        default: "engagement_nudge",
+      },
+    ],
+    jsonLogicConverter: (node) => ({
+      action: "send_email",
+      template: node.data?.templateId || "engagement_nudge",
+      subject: node.data?.subject || "Getting started tips and FAQs",
+      type: "engagement_nudge",
+      content_type: "onboarding_tips",
+    }),
+  });
+
+  NodeRegistry.registerNodeType("value-highlight-email", {
+    category: "Actions",
+    subcategory: "Email",
+    icon: "⭐",
+    color: "#d32f2f",
+    label: "Value Highlight",
+    description: "Showcase main benefits and features",
+    properties: [
+      {
+        key: "subject",
+        label: "Email Subject",
+        type: "text",
+        default: "Discover your key benefits and features",
+      },
+      {
+        key: "templateId",
+        label: "Template ID",
+        type: "text",
+        default: "value_highlight",
+      },
+    ],
+    jsonLogicConverter: (node) => ({
+      action: "send_email",
+      template: node.data?.templateId || "value_highlight",
+      subject: node.data?.subject || "Discover your key benefits and features",
+      type: "value_highlight",
+      content_type: "benefits_features",
     }),
   });
 

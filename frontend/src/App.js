@@ -22,7 +22,7 @@ import axios from "axios";
 import { NodeRegistry } from "./core/NodeRegistry";
 import { JsonLogicConverter } from "./core/JsonLogicConverter";
 import { WorkflowValidator } from "./core/WorkflowValidator";
-import { WorkflowTemplates } from "./core/WorkflowTemplates";
+import { WorkflowTemplates, initializeDefaultTemplates } from "./core/WorkflowTemplates";
 import WorkflowToJsonLogicConverter from "./utils/workflowToJsonLogic";
 import "./App.css";
 
@@ -193,6 +193,9 @@ function App() {
   const reactFlowWrapper = useRef(null);
 
   useEffect(() => {
+    // Initialize default templates
+    initializeDefaultTemplates();
+
     axios.get("/api/workflows").then((res) => setWorkflows(res.data));
   }, []);
 
@@ -858,34 +861,10 @@ function App() {
               <h3>Templates</h3>
               <div className="template-buttons">
                 <button
-                  onClick={() => loadTemplate("subscription-welcome-series")}
+                  onClick={() => loadTemplate("segmented-welcome-flow")}
                   style={{ fontSize: "11px", marginBottom: "4px" }}
                 >
-                  📧 Subscription Welcome
-                </button>
-                <button
-                  onClick={() => loadTemplate("newsletter-welcome-series")}
-                  style={{ fontSize: "11px", marginBottom: "4px" }}
-                >
-                  📬 Newsletter Welcome
-                </button>
-                <button
-                  onClick={() => loadTemplate("segmented-welcome-template")}
-                  style={{ fontSize: "11px", marginBottom: "4px" }}
-                >
-                  🎯 Segmented Welcome
-                </button>
-                <button
-                  onClick={() => loadTemplate("re-engagement-campaign")}
-                  style={{ fontSize: "11px", marginBottom: "4px" }}
-                >
-                  🔄 Re-engagement
-                </button>
-                <button
-                  onClick={() => loadTemplate("ab-test-template")}
-                  style={{ fontSize: "11px", marginBottom: "4px" }}
-                >
-                  🧪 A/B Test
+                  🌳 Segmented Welcome Flow (Tree Structure)
                 </button>
               </div>
             </div>

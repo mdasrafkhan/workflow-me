@@ -107,12 +107,14 @@ export class JsonLogicConverter {
    */
   static handleBranching(node, nodeLogic, outgoingEdges, allNodes, allEdges, visited) {
     const branches = [];
+    const branchNodes = [];
 
     outgoingEdges.forEach(edge => {
       const nextNode = allNodes.find(n => n.id === edge.target);
       if (nextNode) {
         const nextLogic = this.buildLogicTree(nextNode, allNodes, allEdges, new Set(visited));
         branches.push(nextLogic);
+        branchNodes.push(nextNode);
       }
     });
 
@@ -124,7 +126,11 @@ export class JsonLogicConverter {
     const nodeType = NodeRegistry.getNodeType(node.type);
 
     if (nodeType && nodeType.category === 'Conditions') {
-      // Conditional branching
+      // Special handling for product package conditions with multiple branches
+      if (node.type === 'product-package-condition' && branches.length > 1) {
+        return this.createProductPackageConditionBranch(node, nodeLogic, branches, branchNodes);
+      }
+      // Standard conditional branching
       return this.createConditionalBranch(nodeLogic, branches);
     } else if (nodeType && nodeType.category === 'Flow Control') {
       // Flow control branching
@@ -136,6 +142,30 @@ export class JsonLogicConverter {
       // Default: parallel execution
       return this.createParallelBranch(nodeLogic, branches);
     }
+  }
+
+  /**
+   * Create product package condition branch logic
+   * This handles the specific case where we have different welcome emails for different packages
+   */
+  static createProductPackageConditionBranch(node, nodeLogic, branches, branchNodes) {
+    const conditionType = node.data?.conditionType;
+
+    // If this is a specific package condition, create the appropriate logic
+    if (conditionType === 'package_1' || conditionType === 'package_2') {
+      // For specific packages, we want to execute the corresponding branch
+      const targetBranchIndex = conditionType === 'package_1' ? 0 : 1;
+      if (branches[targetBranchIndex]) {
+        return this.chainLogic(nodeLogic, branches[targetBranchIndex]);
+      }
+    } else if (conditionType === 'all_others') {
+      // For "all others", we want to execute the last branch (typically the generic welcome)
+      const lastBranch = branches[branches.length - 1];
+      return this.chainLogic(nodeLogic, lastBranch);
+    }
+
+    // Fallback to standard conditional branching
+    return this.createConditionalBranch(nodeLogic, branches);
   }
 
   /**
@@ -152,21 +182,57 @@ export class JsonLogicConverter {
       };
     }
 
-    // Multiple branches - create if-else chain
-    let ifElseChain = {
-      "if": [
-        condition,
-        branches[0],
-        branches[1] || { "always": false }
-      ]
-    };
-
-    // Add more branches if needed
-    for (let i = 2; i < branches.length; i++) {
-      ifElseChain = {
+    if (branches.length === 2) {
+      return {
         "if": [
           condition,
           branches[0],
+          branches[1]
+        ]
+      };
+    }
+
+    // Multiple branches - create proper if-else chain
+    // For 3+ branches, we need to create nested if-else structures
+    let ifElseChain = branches[branches.length - 1]; // Start with the last branch (else case)
+
+    // Build the chain from right to left
+    for (let i = branches.length - 2; i >= 0; i--) {
+      ifElseChain = {
+        "if": [
+          condition,
+          branches[i],
+          ifElseChain
+        ]
+      };
+    }
+
+    return ifElseChain;
+  }
+
+  /**
+   * Create multi-condition branch logic for complex if-else scenarios
+   * This handles cases where we have multiple conditions that need to be evaluated
+   */
+  static createMultiConditionBranch(conditions, branches) {
+    if (conditions.length !== branches.length) {
+      console.warn('Number of conditions must match number of branches');
+      return { "always": false };
+    }
+
+    if (conditions.length === 1) {
+      return this.createConditionalBranch(conditions[0], [branches[0]]);
+    }
+
+    // Create nested if-else chain for multiple conditions
+    let ifElseChain = branches[branches.length - 1]; // Start with the last branch (else case)
+
+    // Build the chain from right to left
+    for (let i = conditions.length - 2; i >= 0; i--) {
+      ifElseChain = {
+        "if": [
+          conditions[i],
+          branches[i],
           ifElseChain
         ]
       };
@@ -242,12 +308,14 @@ export class JsonLogicConverter {
 
       // Subscription data
       subscription_package: "premium",
+      subscription_package_id: "24", // For the new product package condition
       subscription_status: "active",
       subscription_start_date: "2024-01-15",
 
       // User segment data
       user_segment: "new_user",
       user_type: "individual",
+      user_member_type: "group_member",
       registration_date: "2024-01-15",
 
       // Activity data

@@ -1,7 +1,6 @@
 /**
- * Workflow Templates System
- * Pre-built workflow templates for common use cases
- * Makes it easy to create new workflows from proven patterns
+ * Workflow Templates - Single Clean Template
+ * Implements the tree structure discussed for subscription workflows
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -21,12 +20,11 @@ export class WorkflowTemplates {
       createdAt: new Date(),
       // Default values
       category: template.category || 'General',
-      description: template.description || '',
-      tags: template.tags || [],
       difficulty: template.difficulty || 'beginner',
       estimatedTime: template.estimatedTime || '5 minutes',
-      nodes: template.nodes || [],
-      edges: template.edges || []
+      version: template.version || '1.0.0',
+      tags: template.tags || [],
+      type: 'custom'
     });
   }
 
@@ -73,12 +71,12 @@ export class WorkflowTemplates {
    * @returns {Array} Matching templates
    */
   static searchTemplates(query) {
-    const lowerQuery = query.toLowerCase();
+    const lowercaseQuery = query.toLowerCase();
     return Array.from(this.templates.values())
       .filter(template =>
-        template.name.toLowerCase().includes(lowerQuery) ||
-        template.description.toLowerCase().includes(lowerQuery) ||
-        template.tags.some(tag => tag.toLowerCase().includes(lowerQuery))
+        template.name.toLowerCase().includes(lowercaseQuery) ||
+        template.description.toLowerCase().includes(lowercaseQuery) ||
+        template.tags.some(tag => tag.toLowerCase().includes(lowercaseQuery))
       );
   }
 
@@ -105,7 +103,7 @@ export class WorkflowTemplates {
         id: newNodeId,
         data: {
           ...node.data,
-          ...customizations[node.id] // Apply customizations
+          ...customizations[node.id] || {}
         }
       };
     });
@@ -118,426 +116,134 @@ export class WorkflowTemplates {
     }));
 
     return {
-      name: `${template.name} (Copy)`,
       nodes: newNodes,
       edges: newEdges,
-      templateId: templateId,
-      templateVersion: template.version || '1.0.0'
+      template: {
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        difficulty: template.difficulty,
+        estimatedTime: template.estimatedTime,
+        version: template.version,
+        tags: template.tags
+      }
     };
   }
 }
 
-// Initialize with default templates
+// Initialize with single clean template
 export function initializeDefaultTemplates() {
-  // Subscription Welcome Series Template
-  WorkflowTemplates.registerTemplate('subscription-welcome-series', {
-    name: 'Subscription Welcome Series',
+  // Single Clean Segmented Welcome Flow Template
+  WorkflowTemplates.registerTemplate('segmented-welcome-flow', {
+    name: 'Segmented Welcome Flow',
     category: 'Subscription',
-    description: 'Complete welcome series for new subscribers with product-specific messaging',
-    tags: ['subscription', 'welcome', 'onboarding', 'segmented'],
-    difficulty: 'intermediate',
-    estimatedTime: '10 minutes',
-    version: '1.0.0',
-    nodes: [
-      {
-        id: 'trigger-1',
-        type: 'subscription-trigger',
-        position: { x: 100, y: 100 },
-        data: {
-          triggerEvent: 'user_buys_subscription',
-          label: 'Subscription Trigger'
-        }
-      },
-      {
-        id: 'condition-1',
-        type: 'product-condition',
-        position: { x: 300, y: 100 },
-        data: {
-          packageType: 'premium',
-          label: 'Product Condition'
-        }
-      },
-      {
-        id: 'delay-1',
-        type: 'delay-node',
-        position: { x: 500, y: 100 },
-        data: {
-          delayType: '1_day',
-          label: 'Wait 1 Day'
-        }
-      },
-      {
-        id: 'email-1',
-        type: 'welcome-email',
-        position: { x: 700, y: 100 },
-        data: {
-          emailTemplate: 'welcome_premium',
-          subject: 'Welcome to Premium!',
-          label: 'Welcome Email'
-        }
-      },
-      {
-        id: 'delay-2',
-        type: 'random-delay-node',
-        position: { x: 900, y: 100 },
-        data: {
-          minDelay: '3_days',
-          maxDelay: '5_days',
-          label: 'Wait 3-5 Days'
-        }
-      },
-      {
-        id: 'email-2',
-        type: 'follow-up-email',
-        position: { x: 1100, y: 100 },
-        data: {
-          followUpType: 'engagement',
-          label: 'Follow-up Email'
-        }
-      },
-      {
-        id: 'end-1',
-        type: 'end-node',
-        position: { x: 1300, y: 100 },
-        data: {
-          label: 'End'
-        }
-      }
-    ],
-    edges: [
-      {
-        id: 'edge-1',
-        source: 'trigger-1',
-        target: 'condition-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-2',
-        source: 'condition-1',
-        target: 'delay-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-3',
-        source: 'delay-1',
-        target: 'email-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-4',
-        source: 'email-1',
-        target: 'delay-2',
-        type: 'custom'
-      },
-      {
-        id: 'edge-5',
-        source: 'delay-2',
-        target: 'email-2',
-        type: 'custom'
-      },
-      {
-        id: 'edge-6',
-        source: 'email-2',
-        target: 'end-1',
-        type: 'custom'
-      }
-    ]
-  });
-
-  // Newsletter Sign-up Welcome Series Template
-  WorkflowTemplates.registerTemplate('newsletter-welcome-series', {
-    name: 'Newsletter Welcome Series',
-    category: 'Newsletter',
-    description: 'Simple welcome series for newsletter subscribers',
-    tags: ['newsletter', 'welcome', 'simple'],
+    description: 'Clean tree structure: Product package branching with direct actions, then shared flow',
+    tags: ['subscription', 'segmented', 'if-else', 'product-specific', 'welcome', 'engagement', 'tree'],
     difficulty: 'beginner',
     estimatedTime: '5 minutes',
-    version: '1.0.0',
-    nodes: [
-      {
-        id: 'trigger-1',
-        type: 'newsletter-trigger',
-        position: { x: 100, y: 100 },
-        data: {
-          triggerEvent: 'user_signs_up_newsletter',
-          label: 'Newsletter Trigger'
-        }
-      },
-      {
-        id: 'email-1',
-        type: 'welcome-email',
-        position: { x: 300, y: 100 },
-        data: {
-          emailTemplate: 'welcome_basic',
-          subject: 'Welcome to our newsletter!',
-          label: 'Welcome Email'
-        }
-      },
-      {
-        id: 'delay-1',
-        type: 'delay-node',
-        position: { x: 500, y: 100 },
-        data: {
-          delayType: '2_days',
-          label: 'Wait 2 Days'
-        }
-      },
-      {
-        id: 'email-2',
-        type: 'newsletter-email',
-        position: { x: 700, y: 100 },
-        data: {
-          newsletterType: 'weekly',
-          label: 'Newsletter Email'
-        }
-      },
-      {
-        id: 'end-1',
-        type: 'end-node',
-        position: { x: 900, y: 100 },
-        data: {
-          label: 'End'
-        }
-      }
-    ],
-    edges: [
-      {
-        id: 'edge-1',
-        source: 'trigger-1',
-        target: 'email-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-2',
-        source: 'email-1',
-        target: 'delay-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-3',
-        source: 'delay-1',
-        target: 'email-2',
-        type: 'custom'
-      },
-      {
-        id: 'edge-4',
-        source: 'email-2',
-        target: 'end-1',
-        type: 'custom'
-      }
-    ]
-  });
-
-  // Segmented Welcome Template (from document)
-  WorkflowTemplates.registerTemplate('segmented-welcome-template', {
-    name: 'Segmented Welcome Template',
-    category: 'Subscription',
-    description: 'Product-specific welcome messages based on subscription package',
-    tags: ['subscription', 'segmented', 'product-specific', 'welcome'],
-    difficulty: 'intermediate',
-    estimatedTime: '8 minutes',
-    version: '1.0.0',
+    version: '3.0.0',
     nodes: [
       {
         id: 'trigger-1',
         type: 'subscription-trigger',
-        position: { x: 100, y: 200 },
+        position: { x: 300, y: 50 },
         data: {
           triggerEvent: 'user_buys_subscription',
           label: 'User buys subscription'
         }
       },
       {
-        id: 'condition-1',
-        type: 'product-condition',
-        position: { x: 300, y: 200 },
+        id: 'product-condition',
+        type: 'product-package-condition',
+        position: { x: 300, y: 150 },
         data: {
-          packageType: 'premium',
-          label: 'Which product did the user subscribe to?'
+          conditionType: 'multi_branch',
+          package1Id: '24',
+          package2Id: '128',
+          label: 'Which product package?'
         }
       },
       {
-        id: 'split-1',
-        type: 'split-node',
-        position: { x: 500, y: 200 },
+        id: 'action-united',
+        type: 'united-welcome-email',
+        position: { x: 100, y: 250 },
         data: {
-          splitType: 'conditional',
-          label: 'Split by Product'
+          subject: 'Welcome to United 🪅 — here\'s how to get started',
+          templateId: 'united_welcome',
+          label: 'United Welcome Action'
         }
       },
       {
-        id: 'email-1',
-        type: 'welcome-email',
-        position: { x: 700, y: 100 },
+        id: 'action-podcast',
+        type: 'podcast-welcome-email',
+        position: { x: 300, y: 250 },
         data: {
-          emailTemplate: 'welcome_premium',
-          subject: 'Welcome to United 🎊 — here\'s how to get started',
-          label: 'Premium Welcome Email'
-        }
-      },
-      {
-        id: 'email-2',
-        type: 'welcome-email',
-        position: { x: 700, y: 300 },
-        data: {
-          emailTemplate: 'welcome_basic',
           subject: 'Welcome to the podcast — here\'s what you can do first',
-          label: 'Basic Welcome Email'
+          templateId: 'podcast_welcome',
+          label: 'Podcast Welcome Action'
         }
       },
       {
-        id: 'email-3',
-        type: 'welcome-email',
-        position: { x: 700, y: 500 },
+        id: 'action-generic',
+        type: 'generic-welcome-email',
+        position: { x: 500, y: 250 },
         data: {
-          emailTemplate: 'welcome_basic',
-          subject: 'Welcome! Here\'s what you can do first',
-          label: 'Default Welcome Email'
+          subject: 'Welcome! Here\'s how to get started',
+          templateId: 'generic_welcome',
+          label: 'Generic Welcome Action'
         }
       },
       {
-        id: 'merge-1',
+        id: 'shared-flow-start',
         type: 'merge-node',
-        position: { x: 900, y: 300 },
+        position: { x: 300, y: 350 },
         data: {
-          label: 'Merge'
-        }
-      },
-      {
-        id: 'end-1',
-        type: 'end-node',
-        position: { x: 1100, y: 300 },
-        data: {
-          label: 'End'
-        }
-      }
-    ],
-    edges: [
-      {
-        id: 'edge-1',
-        source: 'trigger-1',
-        target: 'condition-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-2',
-        source: 'condition-1',
-        target: 'split-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-3',
-        source: 'split-1',
-        target: 'email-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-4',
-        source: 'split-1',
-        target: 'email-2',
-        type: 'custom'
-      },
-      {
-        id: 'edge-5',
-        source: 'split-1',
-        target: 'email-3',
-        type: 'custom'
-      },
-      {
-        id: 'edge-6',
-        source: 'email-1',
-        target: 'merge-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-7',
-        source: 'email-2',
-        target: 'merge-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-8',
-        source: 'email-3',
-        target: 'merge-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-9',
-        source: 'merge-1',
-        target: 'end-1',
-        type: 'custom'
-      }
-    ]
-  });
-
-  // Re-engagement Campaign Template
-  WorkflowTemplates.registerTemplate('re-engagement-campaign', {
-    name: 'Re-engagement Campaign',
-    category: 'Retention',
-    description: 'Multi-step campaign to re-engage inactive users',
-    tags: ['retention', 're-engagement', 'email', 'campaign'],
-    difficulty: 'advanced',
-    estimatedTime: '15 minutes',
-    version: '1.0.0',
-    nodes: [
-      {
-        id: 'trigger-1',
-        type: 'subscription-trigger',
-        position: { x: 100, y: 100 },
-        data: {
-          triggerEvent: 'user_inactive_30_days',
-          label: 'User Inactive 30 Days'
-        }
-      },
-      {
-        id: 'email-1',
-        type: 'follow-up-email',
-        position: { x: 300, y: 100 },
-        data: {
-          followUpType: 'retention',
-          label: 'First Re-engagement Email'
+          label: 'Shared Flow Starts Here'
         }
       },
       {
         id: 'delay-1',
         type: 'delay-node',
-        position: { x: 500, y: 100 },
+        position: { x: 300, y: 450 },
         data: {
-          delayType: '1_week',
-          label: 'Wait 1 Week'
+          delayType: '2_days',
+          label: 'Wait 2-3 days'
         }
       },
       {
-        id: 'email-2',
-        type: 'follow-up-email',
-        position: { x: 700, y: 100 },
+        id: 'engagement-nudge',
+        type: 'engagement-nudge-email',
+        position: { x: 300, y: 550 },
         data: {
-          followUpType: 'retention',
-          label: 'Second Re-engagement Email'
+          subject: 'Getting started tips and FAQs',
+          templateId: 'engagement_nudge',
+          label: 'Engagement Nudge'
         }
       },
       {
         id: 'delay-2',
         type: 'delay-node',
-        position: { x: 900, y: 100 },
+        position: { x: 300, y: 650 },
         data: {
-          delayType: '1_week',
-          label: 'Wait 1 Week'
+          delayType: '5_days',
+          label: 'Wait 5-7 days'
         }
       },
       {
-        id: 'email-3',
-        type: 'follow-up-email',
-        position: { x: 1100, y: 100 },
+        id: 'value-highlight',
+        type: 'value-highlight-email',
+        position: { x: 300, y: 750 },
         data: {
-          followUpType: 'retention',
-          label: 'Final Re-engagement Email'
+          subject: 'Discover your key benefits and features',
+          templateId: 'value_highlight',
+          label: 'Value Highlight'
         }
       },
       {
         id: 'end-1',
         type: 'end-node',
-        position: { x: 1300, y: 100 },
+        position: { x: 300, y: 850 },
         data: {
           label: 'End'
         }
@@ -547,147 +253,75 @@ export function initializeDefaultTemplates() {
       {
         id: 'edge-1',
         source: 'trigger-1',
-        target: 'email-1',
+        target: 'product-condition',
         type: 'custom'
       },
       {
         id: 'edge-2',
-        source: 'email-1',
+        source: 'product-condition',
+        target: 'action-united',
+        type: 'custom'
+      },
+      {
+        id: 'edge-3',
+        source: 'product-condition',
+        target: 'action-podcast',
+        type: 'custom'
+      },
+      {
+        id: 'edge-4',
+        source: 'product-condition',
+        target: 'action-generic',
+        type: 'custom'
+      },
+      {
+        id: 'edge-5',
+        source: 'action-united',
+        target: 'shared-flow-start',
+        type: 'custom'
+      },
+      {
+        id: 'edge-6',
+        source: 'action-podcast',
+        target: 'shared-flow-start',
+        type: 'custom'
+      },
+      {
+        id: 'edge-7',
+        source: 'action-generic',
+        target: 'shared-flow-start',
+        type: 'custom'
+      },
+      {
+        id: 'edge-8',
+        source: 'shared-flow-start',
         target: 'delay-1',
         type: 'custom'
       },
       {
-        id: 'edge-3',
+        id: 'edge-9',
         source: 'delay-1',
-        target: 'email-2',
+        target: 'engagement-nudge',
         type: 'custom'
       },
       {
-        id: 'edge-4',
-        source: 'email-2',
+        id: 'edge-10',
+        source: 'engagement-nudge',
         target: 'delay-2',
         type: 'custom'
       },
       {
-        id: 'edge-5',
+        id: 'edge-11',
         source: 'delay-2',
-        target: 'email-3',
+        target: 'value-highlight',
         type: 'custom'
       },
       {
-        id: 'edge-6',
-        source: 'email-3',
-        target: 'end-1',
-        type: 'custom'
-      }
-    ]
-  });
-
-  // A/B Test Template
-  WorkflowTemplates.registerTemplate('ab-test-template', {
-    name: 'A/B Test Template',
-    category: 'Testing',
-    description: 'Template for A/B testing different email variations',
-    tags: ['ab-test', 'testing', 'optimization', 'email'],
-    difficulty: 'advanced',
-    estimatedTime: '12 minutes',
-    version: '1.0.0',
-    nodes: [
-      {
-        id: 'trigger-1',
-        type: 'subscription-trigger',
-        position: { x: 100, y: 200 },
-        data: {
-          triggerEvent: 'user_buys_subscription',
-          label: 'Subscription Trigger'
-        }
-      },
-      {
-        id: 'split-1',
-        type: 'split-node',
-        position: { x: 300, y: 200 },
-        data: {
-          splitType: 'percentage',
-          label: 'A/B Split (50/50)'
-        }
-      },
-      {
-        id: 'email-1',
-        type: 'welcome-email',
-        position: { x: 500, y: 100 },
-        data: {
-          emailTemplate: 'welcome_variant_a',
-          subject: 'Welcome! (Variant A)',
-          label: 'Variant A Email'
-        }
-      },
-      {
-        id: 'email-2',
-        type: 'welcome-email',
-        position: { x: 500, y: 300 },
-        data: {
-          emailTemplate: 'welcome_variant_b',
-          subject: 'Welcome! (Variant B)',
-          label: 'Variant B Email'
-        }
-      },
-      {
-        id: 'merge-1',
-        type: 'merge-node',
-        position: { x: 700, y: 200 },
-        data: {
-          label: 'Merge Results'
-        }
-      },
-      {
-        id: 'end-1',
-        type: 'end-node',
-        position: { x: 900, y: 200 },
-        data: {
-          label: 'End'
-        }
-      }
-    ],
-    edges: [
-      {
-        id: 'edge-1',
-        source: 'trigger-1',
-        target: 'split-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-2',
-        source: 'split-1',
-        target: 'email-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-3',
-        source: 'split-1',
-        target: 'email-2',
-        type: 'custom'
-      },
-      {
-        id: 'edge-4',
-        source: 'email-1',
-        target: 'merge-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-5',
-        source: 'email-2',
-        target: 'merge-1',
-        type: 'custom'
-      },
-      {
-        id: 'edge-6',
-        source: 'merge-1',
+        id: 'edge-12',
+        source: 'value-highlight',
         target: 'end-1',
         type: 'custom'
       }
     ]
   });
 }
-
-// Auto-initialize default templates
-initializeDefaultTemplates();
