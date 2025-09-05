@@ -134,16 +134,17 @@ export class WorkflowTemplates {
 
 // Initialize with single clean template
 export function initializeDefaultTemplates() {
-  // Single Clean Segmented Welcome Flow Template
+  // Proper Tree Structure: Product Package → Condition → Action → Shared Flow
   WorkflowTemplates.registerTemplate('segmented-welcome-flow', {
     name: 'Segmented Welcome Flow',
     category: 'Subscription',
-    description: 'Clean tree structure: Product package branching with direct actions, then shared flow',
+    description: 'Proper tree structure: Product package trigger → separate condition-action pairs → shared flow',
     tags: ['subscription', 'segmented', 'if-else', 'product-specific', 'welcome', 'engagement', 'tree'],
     difficulty: 'beginner',
     estimatedTime: '5 minutes',
-    version: '3.0.0',
+    version: '4.0.0',
     nodes: [
+      // Trigger
       {
         id: 'trigger-1',
         type: 'subscription-trigger',
@@ -153,47 +154,82 @@ export function initializeDefaultTemplates() {
           label: 'User buys subscription'
         }
       },
+      // Branch A: Package 1 (United)
       {
-        id: 'product-condition',
-        type: 'product-package-condition',
-        position: { x: 300, y: 150 },
+        id: 'condition-package-1',
+        type: 'condition',
+        position: { x: 100, y: 150 },
         data: {
-          conditionType: 'multi_branch',
-          package1Id: '24',
-          package2Id: '128',
-          label: 'Which product package?'
+          conditionType: 'product_package',
+          conditionValue: 'package_1',
+          operator: 'equals',
+          description: 'Product Package 1 (United)',
+          label: 'Package 1?'
         }
       },
       {
         id: 'action-united',
-        type: 'united-welcome-email',
+        type: 'action',
         position: { x: 100, y: 250 },
         data: {
-          subject: 'Welcome to United 🪅 — here\'s how to get started',
-          templateId: 'united_welcome',
-          label: 'United Welcome Action'
+          actionType: 'send_email',
+          actionName: 'United Welcome Email',
+          actionData: '{"subject": "Welcome to United 🪅 — here\'s how to get started", "templateId": "united_welcome"}',
+          description: 'Send United-specific welcome email',
+          label: 'United Welcome'
+        }
+      },
+      // Branch B: Package 2 (Podcast)
+      {
+        id: 'condition-package-2',
+        type: 'condition',
+        position: { x: 300, y: 150 },
+        data: {
+          conditionType: 'product_package',
+          conditionValue: 'package_2',
+          operator: 'equals',
+          description: 'Product Package 2 (Podcast)',
+          label: 'Package 2?'
         }
       },
       {
         id: 'action-podcast',
-        type: 'podcast-welcome-email',
+        type: 'action',
         position: { x: 300, y: 250 },
         data: {
-          subject: 'Welcome to the podcast — here\'s what you can do first',
-          templateId: 'podcast_welcome',
-          label: 'Podcast Welcome Action'
+          actionType: 'send_email',
+          actionName: 'Podcast Welcome Email',
+          actionData: '{"subject": "Welcome to the podcast — here\'s what you can do first", "templateId": "podcast_welcome"}',
+          description: 'Send Podcast-specific welcome email',
+          label: 'Podcast Welcome'
+        }
+      },
+      // Branch C: All Others
+      {
+        id: 'condition-all-others',
+        type: 'condition',
+        position: { x: 500, y: 150 },
+        data: {
+          conditionType: 'product_package',
+          conditionValue: 'package_1,package_2',
+          operator: 'not_in',
+          description: 'All other product packages',
+          label: 'All Others?'
         }
       },
       {
         id: 'action-generic',
-        type: 'generic-welcome-email',
+        type: 'action',
         position: { x: 500, y: 250 },
         data: {
-          subject: 'Welcome! Here\'s how to get started',
-          templateId: 'generic_welcome',
-          label: 'Generic Welcome Action'
+          actionType: 'send_email',
+          actionName: 'Generic Welcome Email',
+          actionData: '{"subject": "Welcome! Here\'s how to get started", "templateId": "generic_welcome"}',
+          description: 'Send generic welcome email for other packages',
+          label: 'Generic Welcome'
         }
       },
+      // Shared Flow (Merge Point)
       {
         id: 'shared-flow-start',
         type: 'shared-flow',
@@ -204,6 +240,7 @@ export function initializeDefaultTemplates() {
           description: 'All welcome email branches merge into this shared follow-up sequence'
         }
       },
+      // Shared Flow Steps
       {
         id: 'delay-1',
         type: 'delay-node',
@@ -215,11 +252,13 @@ export function initializeDefaultTemplates() {
       },
       {
         id: 'engagement-nudge',
-        type: 'engagement-nudge-email',
+        type: 'action',
         position: { x: 300, y: 550 },
         data: {
-          subject: 'Getting started tips and FAQs',
-          templateId: 'engagement_nudge',
+          actionType: 'send_email',
+          actionName: 'Engagement Nudge Email',
+          actionData: '{"subject": "Getting started tips and FAQs", "templateId": "engagement_nudge"}',
+          description: 'Send engagement nudge with tips and FAQs',
           label: 'Engagement Nudge'
         }
       },
@@ -234,11 +273,13 @@ export function initializeDefaultTemplates() {
       },
       {
         id: 'value-highlight',
-        type: 'value-highlight-email',
+        type: 'action',
         position: { x: 300, y: 750 },
         data: {
-          subject: 'Discover your key benefits and features',
-          templateId: 'value_highlight',
+          actionType: 'send_email',
+          actionName: 'Value Highlight Email',
+          actionData: '{"subject": "Discover your key benefits and features", "templateId": "value_highlight"}',
+          description: 'Send value highlight showcasing main benefits',
           label: 'Value Highlight'
         }
       },
@@ -252,74 +293,90 @@ export function initializeDefaultTemplates() {
       }
     ],
     edges: [
+      // From trigger to all conditions
       {
         id: 'edge-1',
         source: 'trigger-1',
-        target: 'product-condition',
+        target: 'condition-package-1',
         type: 'custom'
       },
       {
         id: 'edge-2',
-        source: 'product-condition',
-        target: 'action-united',
+        source: 'trigger-1',
+        target: 'condition-package-2',
         type: 'custom'
       },
       {
         id: 'edge-3',
-        source: 'product-condition',
-        target: 'action-podcast',
+        source: 'trigger-1',
+        target: 'condition-all-others',
         type: 'custom'
       },
+      // From conditions to their actions
       {
         id: 'edge-4',
-        source: 'product-condition',
-        target: 'action-generic',
+        source: 'condition-package-1',
+        target: 'action-united',
         type: 'custom'
       },
       {
         id: 'edge-5',
+        source: 'condition-package-2',
+        target: 'action-podcast',
+        type: 'custom'
+      },
+      {
+        id: 'edge-6',
+        source: 'condition-all-others',
+        target: 'action-generic',
+        type: 'custom'
+      },
+      // From all actions to shared flow (merge point)
+      {
+        id: 'edge-7',
         source: 'action-united',
         target: 'shared-flow-start',
         type: 'custom'
       },
       {
-        id: 'edge-6',
+        id: 'edge-8',
         source: 'action-podcast',
         target: 'shared-flow-start',
         type: 'custom'
       },
       {
-        id: 'edge-7',
+        id: 'edge-9',
         source: 'action-generic',
         target: 'shared-flow-start',
         type: 'custom'
       },
+      // Shared flow sequence
       {
-        id: 'edge-8',
+        id: 'edge-10',
         source: 'shared-flow-start',
         target: 'delay-1',
         type: 'custom'
       },
       {
-        id: 'edge-9',
+        id: 'edge-11',
         source: 'delay-1',
         target: 'engagement-nudge',
         type: 'custom'
       },
       {
-        id: 'edge-10',
+        id: 'edge-12',
         source: 'engagement-nudge',
         target: 'delay-2',
         type: 'custom'
       },
       {
-        id: 'edge-11',
+        id: 'edge-13',
         source: 'delay-2',
         target: 'value-highlight',
         type: 'custom'
       },
       {
-        id: 'edge-12',
+        id: 'edge-14',
         source: 'value-highlight',
         target: 'end-1',
         type: 'custom'
