@@ -5,12 +5,24 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { WorkflowExecutionResult, WorkflowExecutionContext, ExecutionStep } from './types';
+import { ActionService, ActionContext } from '../../services/action.service';
+import { SharedFlowService } from '../../services/shared-flow.service';
+import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
 const jsonLogic = require('json-logic-js');
 
 @Injectable()
 export class WorkflowExecutor {
   private readonly logger = new Logger(WorkflowExecutor.name);
+
+  constructor(
+    private readonly actionService: ActionService,
+    private readonly sharedFlowService: SharedFlowService,
+    @InjectRepository(WorkflowDelay)
+    private readonly delayRepository: Repository<WorkflowDelay>
+  ) {}
 
   /**
    * Execute a workflow with enhanced error handling and logging
@@ -259,23 +271,67 @@ export class WorkflowExecutor {
 
       // Calculate delay hours
       let delayHours = 0;
+      let delayType = 'fixed';
+
+      // Handle different delay type formats from frontend
       if (delay.type === 'fixed') {
         delayHours = delay.hours || 0;
+        delayType = 'fixed';
       } else if (delay.type === 'random') {
         const minHours = delay.min_hours || 0;
         const maxHours = delay.max_hours || minHours;
         delayHours = Math.random() * (maxHours - minHours) + minHours;
+        delayType = 'random';
+      } else {
+        // Handle frontend delay type mappings (e.g., "2_days", "1_week", etc.)
+        const delayMap = {
+          '1_hour': 1,
+          '1_day': 24,
+          '2_days': 48,
+          '3_days': 72,
+          '5_days': 120,
+          '1_week': 168,
+          '2_weeks': 336,
+          '1_month': 720
+        };
+
+        delayHours = delayMap[delay.type] || delay.hours || 24; // Default to 24 hours
+        delayType = 'fixed';
       }
 
       // Calculate execution time
       const executeAt = new Date(scheduledAt.getTime() + (delayHours * 60 * 60 * 1000));
+
+      // Save delay to database
+      const delayRecord = this.delayRepository.create({
+        executionId: executionId,
+        stepId: step.id,
+        delayType: delayType, // Use the processed delayType
+        delayMs: delayHours * 60 * 60 * 1000, // Convert hours to milliseconds
+        scheduledAt: scheduledAt,
+        executeAt: executeAt,
+        status: 'pending',
+        context: {
+          workflowId: context.metadata?.workflowId || 0,
+          userId: context.metadata?.userId || 'unknown',
+          originalDelayType: delay.type, // Keep original for reference
+          ...context.data
+        },
+        retryCount: 0
+      });
+
+      await this.delayRepository.save(delayRecord);
+
+      this.logger.log(`Delay saved to database: ${delayRecord.id} - ${delayHours} hours delay for execution ${executionId}, resume at ${executeAt.toISOString()}`);
 
       // Create enhanced delay result with timing information
       const delayResult = {
         execute: false, // CRITICAL: This stops workflow execution
         workflowSuspended: true, // Indicates workflow should be suspended
         delay: {
-          type: delay.type,
+          id: delayRecord.id,
+          type: delayType, // Use the processed delayType
+          originalType: delay.type, // Keep original for reference
           hours: delayHours,
           scheduledAt: scheduledAt.toISOString(),
           executeAt: executeAt.toISOString(),
@@ -490,7 +546,7 @@ export class WorkflowExecutor {
       this.logger.debug(`With data: ${JSON.stringify(context.data)}`);
 
       // Check for custom operations first
-      const customResult = this.executeCustomOperations(rule, context.data);
+      const customResult = await this.executeCustomOperations(rule, context.data, context);
       if (customResult !== null) {
         step.result = customResult;
         step.status = 'completed';
@@ -545,67 +601,66 @@ export class WorkflowExecutor {
   }
 
   /**
-   * Execute specific actions
+   * Execute specific actions using ActionService
    */
   private async executeAction(action: string, rule: any, context: WorkflowExecutionContext): Promise<any> {
-    switch (action) {
-      case 'send_email':
-        return this.executeSendEmailAction(rule, context);
-      case 'update_user':
-        return this.executeUpdateUserAction(rule, context);
-      case 'create_task':
-        return this.executeCreateTaskAction(rule, context);
-      default:
-        this.logger.warn(`Unknown action: ${action}`);
-        return { action, status: 'unknown' };
+    this.logger.log(`Executing action: ${action}`);
+    this.logger.debug(`Action rule: ${JSON.stringify(rule)}`);
+    this.logger.debug(`Context data: ${JSON.stringify(context.data)}`);
+
+    // Extract action properties from rule
+    const actionType = rule.action || action;
+    const actionName = rule.actionName || rule.name || `${actionType}_action`;
+    const actionDetails = rule.actionDetails || rule.details || rule;
+
+    this.logger.debug(`Rule object: ${JSON.stringify(rule)}`);
+    this.logger.debug(`Action details: ${JSON.stringify(actionDetails)}`);
+
+    // Log action properties for debugging
+    this.logger.log(`Action Properties:`);
+    this.logger.log(`  - Action Type: ${actionType}`);
+    this.logger.log(`  - Action Name: ${actionName}`);
+    this.logger.log(`  - Action Details: ${JSON.stringify(actionDetails)}`);
+    this.logger.log(`  - User ID: ${(context as any).userId || 'unknown'}`);
+    this.logger.log(`  - User Email: ${(context as any).metadata?.userEmail || 'unknown'}`);
+
+    // Create user data object from context
+    const userData = {
+      id: (context as any).userId,
+      email: (context as any).metadata?.userEmail,
+      name: (context as any).metadata?.userName,
+      product: (context as any).metadata?.product,
+      subscriptionId: (context as any).metadata?.subscriptionId,
+      ...(context as any).triggerData
+    };
+
+    // Create action context
+    const actionContext: ActionContext = {
+      actionType: actionType,
+      actionName: actionName,
+      actionDetails: actionDetails,
+      userData: userData,
+      metadata: context.metadata
+    };
+
+    this.logger.debug(`Action context userData: ${JSON.stringify(userData)}`);
+    this.logger.debug(`Action context metadata: ${JSON.stringify(context.metadata)}`);
+
+    // Validate action context
+    const validation = this.actionService.validateActionContext(actionContext);
+    if (!validation.isValid) {
+      this.logger.error(`Invalid action context: ${validation.errors.join(', ')}`);
+      throw new Error(`Invalid action context: ${validation.errors.join(', ')}`);
     }
+
+    // Execute action using ActionService
+    const result = await this.actionService.executeAction(actionContext);
+
+    this.logger.log(`Action execution completed: ${JSON.stringify(result)}`);
+
+    return result;
   }
 
-  /**
-   * Execute send email action
-   */
-  private async executeSendEmailAction(rule: any, context: WorkflowExecutionContext): Promise<any> {
-    // In a real implementation, this would integrate with an email service
-    this.logger.log(`Sending email: ${rule.template} to ${context.data.email}`);
-
-    return {
-      action: 'send_email',
-      template: rule.template,
-      recipient: context.data.email,
-      status: 'sent',
-      timestamp: new Date()
-    };
-  }
-
-  /**
-   * Execute update user action
-   */
-  private async executeUpdateUserAction(rule: any, context: WorkflowExecutionContext): Promise<any> {
-    // In a real implementation, this would update user data in the database
-    this.logger.log(`Updating user: ${context.data.id}`);
-
-    return {
-      action: 'update_user',
-      userId: context.data.id,
-      status: 'updated',
-      timestamp: new Date()
-    };
-  }
-
-  /**
-   * Execute create task action
-   */
-  private async executeCreateTaskAction(rule: any, context: WorkflowExecutionContext): Promise<any> {
-    // In a real implementation, this would create a task in a task management system
-    this.logger.log(`Creating task for user: ${context.data.id}`);
-
-    return {
-      action: 'create_task',
-      userId: context.data.id,
-      status: 'created',
-      timestamp: new Date()
-    };
-  }
 
   /**
    * Validate JsonLogic rule structure
@@ -927,7 +982,71 @@ export class WorkflowExecutor {
   /**
    * Execute custom operations that are not part of standard JsonLogic
    */
-  private executeCustomOperations(rule: any, data: any): any {
+  private async executeCustomOperations(rule: any, data: any, context?: WorkflowExecutionContext): Promise<any> {
+    // Handle send_email operation
+    if (rule && typeof rule === 'object' && rule.send_email !== undefined) {
+      this.logger.debug(`Executing send_email custom operation: ${JSON.stringify(rule.send_email)}`);
+
+      // Extract action properties
+      const actionType = 'send_email';
+      const actionName = rule.send_email.actionName || rule.send_email.name || 'send_email_action';
+      const actionDetails = {
+        template: rule.send_email.template,
+        subject: rule.send_email.subject,
+        to: rule.send_email.to || data.email,
+        data: rule.send_email.data,
+        priority: rule.send_email.priority || 'normal',
+        category: rule.send_email.category || 'workflow'
+      };
+
+      // Log action properties for debugging
+      this.logger.log(`Custom Send Email Action Properties:`);
+      this.logger.log(`  - Action Type: ${actionType}`);
+      this.logger.log(`  - Action Name: ${actionName}`);
+      this.logger.log(`  - Template: ${actionDetails.template}`);
+      this.logger.log(`  - Subject: ${actionDetails.subject}`);
+      this.logger.log(`  - To: ${actionDetails.to}`);
+      this.logger.log(`  - User ID: ${data.id || 'unknown'}`);
+      this.logger.log(`  - User Email: ${data.email || 'unknown'}`);
+
+      // If we have context, use ActionService for proper execution
+      if (context) {
+        const actionContext: ActionContext = {
+          actionType: actionType,
+          actionName: actionName,
+          actionDetails: actionDetails,
+          userData: data,
+          metadata: context.metadata
+        };
+
+        try {
+          const result = await this.actionService.executeAction(actionContext);
+          this.logger.log(`Custom send_email action executed via ActionService: ${JSON.stringify(result)}`);
+          return result;
+        } catch (error) {
+          this.logger.error(`Custom send_email action failed: ${error.message}`);
+          return {
+            success: false,
+            action: 'send_email',
+            error: error.message,
+            executed: false
+          };
+        }
+      } else {
+        // Fallback for when context is not available
+        this.logger.log(`[MOCK] Would send email: ${actionDetails.subject || 'No subject'} to ${actionDetails.to || 'unknown'}`);
+        return {
+          success: true,
+          action: 'send_email',
+          actionName: actionName,
+          subject: actionDetails.subject,
+          template: actionDetails.template,
+          to: actionDetails.to,
+          executed: true
+        };
+      }
+    }
+
     // Handle product_package condition
     if (rule && typeof rule === 'object' && rule.product_package !== undefined) {
       const expectedPackage = rule.product_package;
@@ -935,11 +1054,11 @@ export class WorkflowExecutor {
 
       this.logger.debug(`Checking product_package: expected=${expectedPackage}, actual=${actualPackage}`);
 
-      // Map package names to actual values
+      // Map package names to actual product values
       const packageMapping = {
-        'package_1': 'premium',
-        'package_2': 'basic',
-        'package_3': 'enterprise'
+        'package_1': 'united',
+        'package_2': 'podcast',
+        'package_3': 'newsletter'
       };
 
       const mappedExpected = packageMapping[expectedPackage] || expectedPackage;
@@ -954,9 +1073,9 @@ export class WorkflowExecutor {
       if (negationRule.in && Array.isArray(negationRule.in)) {
         const actualPackage = data.subscription_package || data.package || data.product;
         const packageMapping = {
-          'package_1': 'premium',
-          'package_2': 'basic',
-          'package_3': 'enterprise'
+          'package_1': 'united',
+          'package_2': 'podcast',
+          'package_3': 'newsletter'
         };
 
         const mappedPackages = negationRule.in.map(pkg => packageMapping[pkg] || pkg);
@@ -964,6 +1083,60 @@ export class WorkflowExecutor {
         this.logger.debug(`Checking product_package negation: actual=${actualPackage}, not_in=${mappedPackages}`);
 
         return !mappedPackages.includes(actualPackage);
+      }
+    }
+
+    // Handle sharedFlow operation
+    if (rule && typeof rule === 'object' && rule.sharedFlow !== undefined) {
+      this.logger.debug(`Executing sharedFlow custom operation: ${JSON.stringify(rule.sharedFlow)}`);
+
+      if (!context) {
+        this.logger.warn('Context not available for sharedFlow operation');
+        return {
+          success: false,
+          error: 'Context not available for sharedFlow operation',
+          executed: false
+        };
+      }
+
+      try {
+        // Create a compatible context for SharedFlowService
+        const compatibleContext = {
+          executionId: 'unknown',
+          workflowId: context.metadata?.workflowId?.toString() || '0',
+          triggerType: 'manual',
+          triggerId: 'unknown',
+          userId: context.metadata?.userId || 'unknown',
+          triggerData: context.data,
+          metadata: context.metadata || {},
+          createdAt: new Date()
+        };
+
+        // Use the shared flow service to execute the shared flow
+        const result = await this.sharedFlowService.executeSharedFlow(
+          rule.sharedFlow.name || 'Unknown Flow',
+          compatibleContext,
+          'unknown'
+        );
+
+        this.logger.log(`Shared flow execution completed: ${JSON.stringify(result)}`);
+        return {
+          success: result.success,
+          operation: 'sharedFlow',
+          flowName: rule.sharedFlow.name,
+          result: result.result,
+          error: result.error,
+          executed: true
+        };
+      } catch (error) {
+        this.logger.error(`Shared flow execution failed: ${error.message}`);
+        return {
+          success: false,
+          operation: 'sharedFlow',
+          flowName: rule.sharedFlow.name,
+          error: error.message,
+          executed: false
+        };
       }
     }
 

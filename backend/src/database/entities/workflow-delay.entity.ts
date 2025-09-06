@@ -14,9 +14,9 @@ export class WorkflowDelay {
   stepId: string;
 
   @Column()
-  delayType: 'fixed' | 'random';
+  delayType: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'bigint' })
   delayMs: number;
 
   @Column({ type: 'timestamp with time zone' })

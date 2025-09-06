@@ -68,7 +68,7 @@ export class NewsletterTriggerService {
 
     const executionContext: WorkflowExecutionContext = {
       executionId: `news_${triggerData.id}_${Date.now()}`,
-      workflowId: 'newsletter-welcome-flow',
+      workflowId: '34', // Use the actual newsletter workflow ID
       triggerType: 'newsletter_subscribed',
       triggerId: triggerData.id,
       userId: triggerData.userId,

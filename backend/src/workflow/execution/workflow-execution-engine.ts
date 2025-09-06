@@ -5,6 +5,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkflowExecution } from '../../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
+import { VisualWorkflow } from '../visual-workflow.entity';
 import { DummyDataService } from '../../services/dummy-data.service';
 import { EmailService } from '../../services/email.service';
 import { SubscriptionTriggerService } from '../../services/subscription-trigger.service';
@@ -30,6 +31,8 @@ export class WorkflowExecutionEngine {
     private readonly executionRepository: Repository<WorkflowExecution>,
     @InjectRepository(WorkflowDelay)
     private readonly delayRepository: Repository<WorkflowDelay>,
+    @InjectRepository(VisualWorkflow)
+    private readonly visualWorkflowRepository: Repository<VisualWorkflow>,
     private readonly dummyDataService: DummyDataService,
     private readonly emailService: EmailService,
     private readonly subscriptionTriggerService: SubscriptionTriggerService,
@@ -117,7 +120,7 @@ export class WorkflowExecutionEngine {
   }
 
   async executeSubscriptionWorkflow(subscription: any): Promise<void> {
-    const workflowId = this.determineWorkflowId(subscription.product);
+    const workflowId = await this.determineWorkflowId(subscription.product);
     const executionId = uuidv4();
 
     this.logger.log(`Executing workflow ${workflowId} for subscription ${subscription.id}`);
@@ -140,7 +143,7 @@ export class WorkflowExecutionEngine {
     };
 
     // Get workflow definition
-    const workflow = this.getWorkflowDefinition(workflowId);
+    const workflow = await this.getWorkflowDefinition(workflowId);
 
     // Create execution record
     const execution = await this.createExecutionRecord(workflowId, context, workflow);
@@ -153,7 +156,7 @@ export class WorkflowExecutionEngine {
     this.logger.log(`Executing workflow ${context.workflowId} for execution ${context.executionId}`);
 
     // Get workflow definition
-    const workflow = this.getWorkflowDefinition(context.workflowId);
+    const workflow = await this.getWorkflowDefinition(context.workflowId);
 
     // Create execution record
     const execution = await this.createExecutionRecord(context.workflowId, context, workflow);
@@ -298,16 +301,26 @@ export class WorkflowExecutionEngine {
 
     switch (conditionType) {
       case 'product_package':
+        // Map package names to actual product values
+        const packageMapping = {
+          'package_1': 'united',
+          'package_2': 'podcast',
+          'package_3': 'newsletter'
+        };
+
+        const actualProduct = context.metadata.product;
+        const expectedProduct = packageMapping[conditionValue] || conditionValue;
+
         if (operator === 'equals') {
-          matches = context.metadata.product === conditionValue;
+          matches = actualProduct === expectedProduct;
         } else if (operator === 'not_equals') {
-          matches = context.metadata.product !== conditionValue;
+          matches = actualProduct !== expectedProduct;
         } else if (operator === 'in') {
-          const values = conditionValue.split(',').map(v => v.trim());
-          matches = values.includes(context.metadata.product);
+          const values = conditionValue.split(',').map(v => v.trim()).map(v => packageMapping[v] || v);
+          matches = values.includes(actualProduct);
         } else if (operator === 'not_in') {
-          const values = conditionValue.split(',').map(v => v.trim());
-          matches = !values.includes(context.metadata.product);
+          const values = conditionValue.split(',').map(v => v.trim()).map(v => packageMapping[v] || v);
+          matches = !values.includes(actualProduct);
         }
         break;
 
@@ -473,8 +486,12 @@ export class WorkflowExecutionEngine {
       throw new Error(`Execution not found: ${delay.executionId}`);
     }
 
-    // Resume workflow from the delayed step
-    const workflow = execution.workflowDefinition;
+    // Get workflow definition from database if not stored in execution
+    let workflow = execution.workflowDefinition;
+    if (!workflow || !workflow.steps) {
+      workflow = await this.getWorkflowDefinition(execution.workflowId);
+    }
+
     const stepIndex = workflow.steps.findIndex(s => s.id === delay.stepId);
 
     if (stepIndex === -1) {
@@ -500,19 +517,307 @@ export class WorkflowExecutionEngine {
     await this.updateExecutionStatus(execution.id, 'completed');
   }
 
-  private determineWorkflowId(product: string): string {
-    const workflowMap = {
-      'united': 'segmented-welcome-flow',
-      'podcast': 'segmented-welcome-flow',
-      'newsletter': 'newsletter-welcome-flow',
-      'default': 'generic-welcome-flow'
-    };
+  private async determineWorkflowId(product: string): Promise<string> {
+    // Find workflows with subscription triggers
+    const workflows = await this.visualWorkflowRepository.find({
+      relations: ['jsonLogicRule']
+    });
 
-    return workflowMap[product] || workflowMap['default'];
+    this.logger.log(`Found ${workflows.length} workflows, looking for product: ${product}`);
+
+    // Find a workflow that has a subscription trigger and matches the product
+    for (const workflow of workflows) {
+      if (workflow.jsonLogicRule?.rule?.trigger === 'subscription') {
+        const rule = workflow.jsonLogicRule.rule;
+
+        // Check if this workflow matches the product
+        // Handle nested rule structure: rule.rule.if
+        const ruleData = rule.rule || rule;
+        if (ruleData.if && ruleData.if[0] && ruleData.if[0].product_package === product) {
+          this.logger.log(`Found matching workflow ${workflow.id} for product ${product}`);
+          return workflow.id.toString();
+        }
+      }
+    }
+
+    // Fallback to the first subscription workflow if no specific match
+    for (const workflow of workflows) {
+      if (workflow.jsonLogicRule?.rule?.trigger === 'subscription') {
+        this.logger.log(`Using fallback workflow ${workflow.id} for product ${product}`);
+        return workflow.id.toString();
+      }
+    }
+
+    // Fallback to the first workflow if none found
+    if (workflows.length > 0) {
+      this.logger.log(`Using first available workflow ${workflows[0].id} for product ${product}`);
+      return workflows[0].id.toString();
+    }
+
+    // Fallback to a default workflow ID
+    return '1'; // Assuming workflow ID 1 exists
   }
 
-  private getWorkflowDefinition(workflowId: string): WorkflowDefinition {
-    // In a real implementation, this would fetch from database
+  private async getWorkflowDefinition(workflowId: string): Promise<WorkflowDefinition> {
+    // Fetch workflow from database
+    const workflow = await this.visualWorkflowRepository.findOne({
+      where: { id: parseInt(workflowId) },
+      relations: ['jsonLogicRule']
+    });
+
+    if (!workflow || !workflow.jsonLogicRule) {
+      throw new Error(`Workflow not found: ${workflowId}`);
+    }
+
+    // Convert visual workflow to WorkflowDefinition
+    return this.convertVisualWorkflowToDefinition(workflow);
+  }
+
+  private convertVisualWorkflowToDefinition(visualWorkflow: any): WorkflowDefinition {
+    const rule = visualWorkflow.jsonLogicRule.rule;
+
+    // For now, return a basic workflow definition
+    // In a full implementation, this would parse the JsonLogic rule
+    return {
+      id: visualWorkflow.id.toString(),
+      name: visualWorkflow.name,
+      description: 'Visual workflow',
+      version: '1.0.0',
+      steps: this.parseJsonLogicToSteps(rule),
+      metadata: {}
+    };
+  }
+
+  private parseJsonLogicToSteps(rule: any): any[] {
+    const steps = [];
+
+    // Handle different rule structures
+    if (rule.parallel) {
+      return this.parseParallelRule(rule.parallel);
+    } else if (rule.if) {
+      return this.parseIfRule(rule);
+    } else if (rule.trigger) {
+      return this.parseSimpleRule(rule);
+    }
+
+    return steps;
+  }
+
+  private parseParallelRule(parallelRule: any): any[] {
+    const steps = [];
+
+    // Add trigger step
+    if (parallelRule.trigger?.trigger) {
+      steps.push({
+        id: 'trigger',
+        type: 'trigger',
+        data: {
+          event: parallelRule.trigger.trigger.event || 'subscription_created',
+          execute: parallelRule.trigger.trigger.execute,
+          reEntryRule: parallelRule.trigger.trigger.reEntryRule
+        }
+      });
+    }
+
+    // Parse branches
+    if (parallelRule.branches) {
+      parallelRule.branches.forEach((branch, branchIndex) => {
+        if (branch.and) {
+          branch.and.forEach((step, stepIndex) => {
+            const stepId = `branch_${branchIndex}_step_${stepIndex}`;
+
+            if (step.product_package) {
+              // Handle negation for "not_in" conditions
+              if (step.product_package['!']) {
+                steps.push({
+                  id: stepId,
+                  type: 'condition',
+                  data: {
+                    conditionType: 'product_package',
+                    conditionValue: step.product_package['!'].in,
+                    operator: 'not_in'
+                  }
+                });
+              } else {
+                steps.push({
+                  id: stepId,
+                  type: 'condition',
+                  data: {
+                    conditionType: 'product_package',
+                    conditionValue: step.product_package,
+                    operator: 'equals'
+                  }
+                });
+              }
+            } else if (step.send_email) {
+              // Map templateId to template for compatibility with action service
+              const emailData = { ...step.send_email.data };
+              if (emailData.templateId && !emailData.template) {
+                emailData.template = emailData.templateId;
+              }
+
+              // Add dummy email if not provided
+              if (!emailData.to) {
+                emailData.to = 'test@example.com';
+              }
+
+              steps.push({
+                id: stepId,
+                type: 'action',
+                data: {
+                  actionType: 'send_email',
+                  actionName: step.send_email.name,
+                  actionData: emailData,
+                  execute: step.send_email.execute,
+                  description: step.send_email.description
+                }
+              });
+            } else if (step.sharedFlow) {
+              steps.push({
+                id: stepId,
+                type: 'shared-flow',
+                data: {
+                  flowName: step.sharedFlow.name,
+                  execute: step.sharedFlow.execute,
+                  description: step.sharedFlow.description
+                }
+              });
+            } else if (step.delay) {
+              const delayMs = this.convertDelayToMs(step.delay.type);
+              steps.push({
+                id: stepId,
+                type: 'delay',
+                data: {
+                  delayType: step.delay.type,
+                  delayMs: delayMs,
+                  execute: step.delay.execute
+                }
+              });
+            } else if (step.end) {
+              steps.push({
+                id: stepId,
+                type: 'end',
+                data: {
+                  reason: step.end.reason,
+                  execute: step.end.execute
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+
+    return steps;
+  }
+
+  private parseIfRule(rule: any): any[] {
+    const steps = [];
+
+    // Add trigger step
+    steps.push({
+      id: 'trigger',
+      type: 'trigger',
+      data: { event: rule.event || 'subscription_created' }
+    });
+
+    // Parse if condition
+    if (rule.if && rule.if.length >= 2) {
+      const condition = rule.if[0];
+      const actions = rule.if[1];
+
+      // Add condition step
+      if (condition.product_package) {
+        steps.push({
+          id: 'condition_product',
+          type: 'condition',
+          data: {
+            conditionType: 'product_package',
+            conditionValue: condition.product_package,
+            operator: 'equals'
+          }
+        });
+      }
+
+      // Parse actions
+      if (actions.and) {
+        actions.and.forEach((action, index) => {
+          const stepId = `action_${index}`;
+
+          if (action.action === 'send_email') {
+            // Map templateId to template for compatibility with action service
+            const emailData = { ...action.actionDetails };
+            if (emailData.templateId && !emailData.template) {
+              emailData.template = emailData.templateId;
+            }
+
+            steps.push({
+              id: stepId,
+              type: 'action',
+              data: {
+                actionType: 'send_email',
+                actionName: action.actionName,
+                actionData: emailData
+              }
+            });
+          } else if (action.delay) {
+            const delayMs = this.convertDelayToMs(action.delay.type);
+            steps.push({
+              id: stepId,
+              type: 'delay',
+              data: {
+                delayType: action.delay.type,
+                delayMs: delayMs
+              }
+            });
+          }
+        });
+      }
+    }
+
+    return steps;
+  }
+
+  private parseSimpleRule(rule: any): any[] {
+    const steps = [];
+
+    // Add trigger step
+    steps.push({
+      id: 'trigger',
+      type: 'trigger',
+      data: { event: rule.event || 'subscription_created' }
+    });
+
+    // Add simple action if present
+    if (rule.action) {
+      steps.push({
+        id: 'action_0',
+        type: 'action',
+        data: {
+          actionType: rule.action,
+          actionName: rule.actionName,
+          actionData: rule.actionDetails
+        }
+      });
+    }
+
+    return steps;
+  }
+
+  private convertDelayToMs(delayType: string): number {
+    const delayMap = {
+      '2_days': 2 * 24 * 60 * 60 * 1000,      // 172,800,000 ms
+      '5_days': 5 * 24 * 60 * 60 * 1000,      // 432,000,000 ms
+      '1_hour': 60 * 60 * 1000,               // 3,600,000 ms
+      '1_day': 24 * 60 * 60 * 1000,           // 86,400,000 ms
+      'fixed': 48 * 60 * 60 * 1000            // 48 hours = 172,800,000 ms
+    };
+
+    return delayMap[delayType] || 0;
+  }
+
+  private getWorkflowDefinitionLegacy(workflowId: string): WorkflowDefinition {
+    // Legacy hardcoded workflows for fallback
     const workflows = {
       'segmented-welcome-flow': {
         id: 'segmented-welcome-flow',

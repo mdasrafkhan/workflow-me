@@ -46,6 +46,7 @@ export class SubscriptionTriggerService {
       data: {
         subscriptionId: subscription.id,
         product: subscription.product,
+        product_package: subscription.product, // Add product_package for workflow compatibility
         status: subscription.status,
         amount: subscription.amount,
         currency: subscription.currency,
@@ -131,9 +132,10 @@ export class SubscriptionTriggerService {
   ): Promise<DummySubscription> {
     // Get subscription type if not provided
     if (!subscriptionTypeId) {
-      const subscriptionType = await this.subscriptionTypeRepository.findOne({
-        where: { metadata: { product } }
-      });
+      const subscriptionType = await this.subscriptionTypeRepository
+        .createQueryBuilder('subscriptionType')
+        .where('subscriptionType.metadata ->> :key = :value', { key: 'product', value: product })
+        .getOne();
       subscriptionTypeId = subscriptionType?.id;
     }
 

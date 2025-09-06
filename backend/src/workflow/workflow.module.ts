@@ -13,6 +13,7 @@ import { SharedFlowService } from '../services/shared-flow.service';
 import { WorkflowActionService } from '../services/workflow-action.service';
 import { WorkflowRecoveryService } from '../services/workflow-recovery.service';
 import { EmailService } from '../services/email.service';
+import { ActionService } from '../services/action.service';
 import { DummyUser } from '../database/entities/dummy-user.entity';
 import { DummySubscription } from '../database/entities/dummy-subscription.entity';
 import { DummySubscriptionType } from '../database/entities/dummy-subscription-type.entity';
@@ -46,6 +47,7 @@ import { WorkflowStateMachineService } from './state-machine/workflow-state-mach
     WorkflowActionService,
     WorkflowRecoveryService,
     EmailService,
+    ActionService,
     DummyDataService,
     WorkflowStateMachineService
   ],

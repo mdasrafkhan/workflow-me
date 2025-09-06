@@ -7,6 +7,7 @@ import { WorkflowActionService } from '../services/workflow-action.service';
 import { WorkflowRecoveryService } from '../services/workflow-recovery.service';
 import { EmailService } from '../services/email.service';
 import { WorkflowService } from './workflow.service';
+import { DummyDataService } from '../services/dummy-data.service';
 
 @Controller('workflow')
 export class WorkflowController {
@@ -19,6 +20,7 @@ export class WorkflowController {
     private readonly workflowRecoveryService: WorkflowRecoveryService,
     private readonly emailService: EmailService,
     private readonly workflowService: WorkflowService,
+    private readonly dummyDataService: DummyDataService,
   ) {}
 
   // Workflow Execution Endpoints
@@ -194,20 +196,68 @@ export class WorkflowController {
     userEmail: string;
     userName: string;
   }) {
-    // Create a test user
-    const user = await this.subscriptionTriggerService.createSubscription(
-      'test-user-id',
-      body.product
-    );
+    try {
+      console.log('🔍 Test subscription workflow started with:', body);
 
-    // Trigger workflow
-    await this.workflowEngine.triggerWorkflowForSubscription(user.id);
+      // Validate input
+      if (!body.product) {
+        throw new Error('Product is required');
+      }
 
-    return {
-      message: 'Test subscription workflow triggered',
-      subscriptionId: user.id,
-      product: body.product
-    };
+      // Create a test user first, then subscription
+      console.log('📝 Creating test user and subscription...');
+      let user;
+      try {
+        // First create a test user
+        const { v4: uuidv4 } = require('uuid');
+        const testUserId = uuidv4();
+
+        // Create user in dummy_users table with unique email
+        const uniqueEmail = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}@example.com`;
+        const testUser = await this.dummyDataService.userRepository.save({
+          id: testUserId,
+          email: uniqueEmail,
+          name: body.userName,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        console.log('✅ Test user created:', testUser.id);
+
+        // Now create subscription
+        user = await this.subscriptionTriggerService.createSubscription(
+          testUserId,
+          body.product
+        );
+        console.log('✅ Subscription created:', user.id);
+      } catch (error) {
+        console.error('❌ User/subscription creation failed:', error);
+        throw new Error(`User/subscription creation failed: ${error.message}`);
+      }
+
+      // Trigger workflow
+      console.log('🚀 Triggering workflow...');
+      try {
+        await this.workflowEngine.triggerWorkflowForSubscription(user.id);
+        console.log('✅ Workflow triggered successfully');
+      } catch (error) {
+        console.error('❌ Workflow triggering failed:', error);
+        throw new Error(`Workflow triggering failed: ${error.message}`);
+      }
+
+      return {
+        message: 'Test subscription workflow triggered',
+        subscriptionId: user.id,
+        product: body.product
+      };
+    } catch (error) {
+      console.error('❌ Test subscription workflow failed:', error);
+      return {
+        statusCode: 500,
+        message: error.message || 'Internal server error',
+        error: error.stack
+      };
+    }
   }
 
   @Post('test/newsletter')
