@@ -13,6 +13,27 @@ services:
     networks:
       - workflow-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workflow_user -d workflow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: workflow-redis
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
@@ -33,19 +54,73 @@ services:
     depends_on:
       - backend
 
+  backend-test:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: workflow-backend-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: workflow_user
+      DB_PASSWORD: workflow_password
+      DB_NAME: workflow_db
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Application Configuration
+      NODE_ENV: test
+      PORT: 4000
+    command: ["npm", "test", "--", "--watchAll=false", "--passWithNoTests"]
+    networks:
+      - workflow-network
+
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
     container_name: workflow-backend
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_USER: workflow_user
-      POSTGRES_PASSWORD: workflow_password
-      POSTGRES_DB: workflow_db
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: workflow_user
+      DB_PASSWORD: workflow_password
+      DB_NAME: workflow_db
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+
+      # Email Configuration (Development)
+      SMTP_HOST: smtp.ethereal.email
+      SMTP_PORT: 587
+      SMTP_USER: ethereal.user@ethereal.email
+      SMTP_PASS: ethereal.pass
+      FROM_EMAIL: noreply@workflow.example.com
+
+      # Application Configuration
       NODE_ENV: development
+      PORT: 4000
+
+      # Workflow Configuration
+      WORKFLOW_BATCH_INTERVAL: 30
+      WORKFLOW_MAX_RETRIES: 3
+      WORKFLOW_DELAY_TOLERANCE: 1000
     ports:
       - "4000:4000"
     volumes:
@@ -54,8 +129,13 @@ services:
     networks:
       - workflow-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  adminer: 
+  adminer:
     image: adminer
     container_name: workflow-adminer
     restart: unless-stopped
@@ -64,8 +144,66 @@ services:
     networks:
       - workflow-network
 
+  # Test Database (for running tests)
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: workflow-test-db
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: workflow_test
+    ports:
+      - "15433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d workflow_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - testing
+
+  # Workflow Test Runner
+  workflow-tester:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.test
+    container_name: workflow-tester
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Test Database Configuration
+      TEST_DB_HOST: postgres-test
+      TEST_DB_PORT: 5432
+      TEST_DB_USER: test_user
+      TEST_DB_PASSWORD: test_password
+      TEST_DB_NAME: workflow_test
+
+      # Email Configuration (Test)
+      SMTP_HOST: smtp.ethereal.email
+      SMTP_PORT: 587
+      SMTP_USER: ethereal.user@ethereal.email
+      SMTP_PASS: ethereal.pass
+      FROM_EMAIL: test@workflow.example.com
+
+      NODE_ENV: test
+    networks:
+      - workflow-network
+    profiles:
+      - testing
+    command: ["npm", "run", "test:workflow"]
+
 volumes:
   postgres_data:
+  postgres_test_data:
+  redis_data:
 
 networks:
   workflow-network:

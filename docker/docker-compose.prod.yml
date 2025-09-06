@@ -3,29 +3,37 @@ services:
     image: postgres:15-alpine
     container_name: workflow-db-prod
     environment:
-      POSTGRES_USER: workflow_user
-      POSTGRES_PASSWORD: workflow_password
-      POSTGRES_DB: workflow_db
+      POSTGRES_USER: ${DB_USER:-workflow_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-workflow_password}
+      POSTGRES_DB: ${DB_NAME:-workflow_db}
     ports:
-      - "15432:5432"
+      - "${DB_PORT:-15432}:5432"
     volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - workflow-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-workflow_user} -d ${DB_NAME:-workflow_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile.prod
-    container_name: workflow-frontend-prod
+  redis:
+    image: redis:7-alpine
+    container_name: workflow-redis-prod
     ports:
-      - "3000:80"
+      - "${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - workflow-network
     restart: unless-stopped
-    depends_on:
-      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
@@ -33,21 +41,89 @@ services:
       dockerfile: Dockerfile.prod
     container_name: workflow-backend-prod
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_USER: workflow_user
-      POSTGRES_PASSWORD: workflow_password
-      POSTGRES_DB: workflow_db
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-workflow_user}
+      DB_PASSWORD: ${DB_PASSWORD:-workflow_password}
+      DB_NAME: ${DB_NAME:-workflow_db}
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+      # Email Configuration
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      FROM_EMAIL: ${FROM_EMAIL}
+
+      # Application Configuration
       NODE_ENV: production
+      PORT: 4000
+
+      # Workflow Configuration
+      WORKFLOW_BATCH_INTERVAL: ${WORKFLOW_BATCH_INTERVAL:-30}
+      WORKFLOW_MAX_RETRIES: ${WORKFLOW_MAX_RETRIES:-3}
+      WORKFLOW_DELAY_TOLERANCE: ${WORKFLOW_DELAY_TOLERANCE:-1000}
     ports:
-      - "4000:4000"
+      - "${PORT:-4000}:4000"
     networks:
       - workflow-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+    container_name: workflow-frontend-prod
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: workflow-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
 
 volumes:
-  postgres_data_prod:
+  postgres_data:
+  redis_data:
 
 networks:
   workflow-network:

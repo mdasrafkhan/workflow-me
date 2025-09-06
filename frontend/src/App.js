@@ -196,7 +196,7 @@ function App() {
     // Initialize default templates
     initializeDefaultTemplates();
 
-    axios.get("/api/workflows").then((res) => setWorkflows(res.data));
+    axios.get("/workflow/visual-workflows").then((res) => setWorkflows(res.data));
   }, []);
 
   // Generate JsonLogic when nodes or edges change
@@ -416,7 +416,7 @@ function App() {
     });
 
     axios
-      .post("/api/workflows", payload)
+      .post("/workflow/visual-workflows", payload)
       .then((res) => {
         setSelectedWorkflow(res.data);
         setWorkflows((list) => {

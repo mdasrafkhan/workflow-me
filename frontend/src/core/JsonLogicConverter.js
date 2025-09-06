@@ -36,7 +36,7 @@ export class JsonLogicConverter {
     // Look for trigger nodes with no incoming edges
     const triggerNodes = nodes.filter(node => {
       const nodeType = NodeRegistry.getNodeType(node.type);
-      return nodeType && nodeType.category === 'Triggers';
+      return nodeType && nodeType.category && nodeType.category.includes('Triggers');
     });
 
     return triggerNodes.find(node =>
@@ -125,17 +125,17 @@ export class JsonLogicConverter {
     // Handle different types of branching
     const nodeType = NodeRegistry.getNodeType(node.type);
 
-    if (nodeType && nodeType.category === 'Conditions') {
+    if (nodeType && nodeType.category && nodeType.category.includes('Conditions')) {
       // Special handling for product package conditions with multiple branches
       if (node.type === 'product-package-condition' && branches.length > 1) {
         return this.createProductPackageConditionBranch(node, nodeLogic, branches, branchNodes);
       }
       // Standard conditional branching
       return this.createConditionalBranch(nodeLogic, branches);
-    } else if (nodeType && nodeType.category === 'Flow Control') {
+    } else if (nodeType && nodeType.category && nodeType.category.includes('Flow Control')) {
       // Flow control branching
       return this.createFlowControlBranch(node, nodeLogic, branches);
-    } else if (nodeType && nodeType.category === 'Actions') {
+    } else if (nodeType && nodeType.category && nodeType.category.includes('Actions')) {
       // Action nodes with multiple paths - execute all paths
       return this.createActionBranch(nodeLogic, branches);
     } else {

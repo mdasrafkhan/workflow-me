@@ -97,6 +97,19 @@ export class NodeRegistry {
   static clear() {
     this.nodeTypes.clear();
   }
+
+  /**
+   * Convert a node to JsonLogic using its registered converter
+   * @param {Object} node - React Flow node
+   * @returns {Object} JsonLogic rule
+   */
+  static convertNodeToJsonLogic(node) {
+    const nodeType = this.getNodeType(node.type);
+    if (!nodeType || !nodeType.jsonLogicConverter) {
+      return { always: true };
+    }
+    return nodeType.jsonLogicConverter(node);
+  }
 }
 
 // ============================================================================

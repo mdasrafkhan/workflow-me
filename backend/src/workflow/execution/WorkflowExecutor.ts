@@ -489,6 +489,16 @@ export class WorkflowExecutor {
       this.logger.debug(`Executing standard JsonLogic rule: ${JSON.stringify(rule)}`);
       this.logger.debug(`With data: ${JSON.stringify(context.data)}`);
 
+      // Check for custom operations first
+      const customResult = this.executeCustomOperations(rule, context.data);
+      if (customResult !== null) {
+        step.result = customResult;
+        step.status = 'completed';
+        step.endTime = Date.now();
+        this.logger.debug(`Custom operation result: ${JSON.stringify(customResult)}`);
+        return customResult;
+      }
+
       if (!jsonLogic || typeof jsonLogic.apply !== 'function') {
         throw new Error('jsonLogic is not properly imported or apply method is not available');
       }
@@ -912,5 +922,51 @@ export class WorkflowExecutor {
       step.endTime = Date.now();
       throw error;
     }
+  }
+
+  /**
+   * Execute custom operations that are not part of standard JsonLogic
+   */
+  private executeCustomOperations(rule: any, data: any): any {
+    // Handle product_package condition
+    if (rule && typeof rule === 'object' && rule.product_package !== undefined) {
+      const expectedPackage = rule.product_package;
+      const actualPackage = data.subscription_package || data.package || data.product;
+
+      this.logger.debug(`Checking product_package: expected=${expectedPackage}, actual=${actualPackage}`);
+
+      // Map package names to actual values
+      const packageMapping = {
+        'package_1': 'premium',
+        'package_2': 'basic',
+        'package_3': 'enterprise'
+      };
+
+      const mappedExpected = packageMapping[expectedPackage] || expectedPackage;
+
+      return actualPackage === mappedExpected;
+    }
+
+    // Handle product_package with negation
+    if (rule && typeof rule === 'object' && rule.product_package && rule.product_package['!']) {
+      const negationRule = rule.product_package['!'];
+
+      if (negationRule.in && Array.isArray(negationRule.in)) {
+        const actualPackage = data.subscription_package || data.package || data.product;
+        const packageMapping = {
+          'package_1': 'premium',
+          'package_2': 'basic',
+          'package_3': 'enterprise'
+        };
+
+        const mappedPackages = negationRule.in.map(pkg => packageMapping[pkg] || pkg);
+
+        this.logger.debug(`Checking product_package negation: actual=${actualPackage}, not_in=${mappedPackages}`);
+
+        return !mappedPackages.includes(actualPackage);
+      }
+    }
+
+    return null; // No custom operation matched
   }
 }

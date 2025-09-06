@@ -7,12 +7,19 @@ describe('JsonLogicConverter', () => {
         {
           id: 'trigger-1',
           type: 'subscription-trigger',
-          data: { selected: 'user_buys_subscription' }
+          data: {
+            triggerEvent: 'user_buys_subscription',
+            reEntryRule: 'once_per_product'
+          }
         },
         {
           id: 'action-1',
-          type: 'welcome-email',
-          data: { selected: 'subscription_welcome' }
+          type: 'action',
+          data: {
+            actionType: 'send_email',
+            actionName: 'Welcome Email',
+            actionData: '{"subject": "Welcome!"}'
+          }
         }
       ];
 
@@ -42,14 +49,18 @@ describe('JsonLogicConverter', () => {
         {
           id: 'trigger-1',
           type: 'subscription-trigger',
-          data: { selected: 'user_buys_subscription' }
+          data: {
+            triggerEvent: 'user_buys_subscription',
+            reEntryRule: 'once_per_product'
+          }
         }
       ];
 
       const result = JsonLogicConverter.convertWorkflow(nodes, []);
 
       expect(result).toBeDefined();
-      expect(result.trigger).toBe('subscription');
+      expect(result.trigger).toBeDefined();
+      expect(result.trigger.event).toBe('user_buys_subscription');
     });
   });
 
