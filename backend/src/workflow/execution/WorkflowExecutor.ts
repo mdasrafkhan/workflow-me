@@ -1108,6 +1108,7 @@ export class WorkflowExecutor {
           triggerId: 'unknown',
           userId: context.metadata?.userId || 'unknown',
           triggerData: context.data,
+          data: context.data,
           metadata: context.metadata || {},
           createdAt: new Date()
         };

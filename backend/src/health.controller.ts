@@ -1,12 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
-import { WorkflowExecutionEngine } from './workflow/execution/workflow-execution-engine';
+import { WorkflowOrchestrationEngine } from './workflow/execution/workflow-orchestration-engine';
 import { DummyDataService } from './services/dummy-data.service';
 import { EmailService } from './services/email.service';
 
 @Controller('health')
 export class HealthController {
   constructor(
-    private readonly workflowEngine: WorkflowExecutionEngine,
+    private readonly workflowEngine: WorkflowOrchestrationEngine,
     private readonly dummyDataService: DummyDataService,
     private readonly emailService: EmailService,
   ) {}

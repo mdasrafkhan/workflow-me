@@ -85,6 +85,7 @@ export class SubscriptionTriggerService {
       triggerId: triggerData.id,
       userId: triggerData.userId,
       triggerData: triggerData.data,
+      data: triggerData.data,
       metadata: {
         product: triggerData.data.product,
         userEmail: triggerData.data.user.email,

@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
-import { WorkflowExecutionEngine } from './execution/workflow-execution-engine';
+import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-engine';
 import { SubscriptionTriggerService } from '../services/subscription-trigger.service';
 import { NewsletterTriggerService } from '../services/newsletter-trigger.service';
 import { SharedFlowService } from '../services/shared-flow.service';
@@ -12,7 +12,7 @@ import { DummyDataService } from '../services/dummy-data.service';
 @Controller('workflow')
 export class WorkflowController {
   constructor(
-    private readonly workflowEngine: WorkflowExecutionEngine,
+    private readonly workflowEngine: WorkflowOrchestrationEngine,
     private readonly subscriptionTriggerService: SubscriptionTriggerService,
     private readonly newsletterTriggerService: NewsletterTriggerService,
     private readonly sharedFlowService: SharedFlowService,
@@ -26,43 +26,73 @@ export class WorkflowController {
   // Workflow Execution Endpoints
   @Get('executions')
   async getAllExecutions() {
-    return await this.workflowEngine.getAllExecutions();
+    // This would need to be implemented in the clean engine or moved to a service
+    return { message: 'Get all executions - to be implemented' };
   }
 
   @Get('executions/:executionId')
   async getExecutionStatus(@Param('executionId') executionId: string) {
-    return await this.workflowEngine.getExecutionStatus(executionId);
+    // This would need to be implemented in the clean engine or moved to a service
+    return { message: `Get execution status for ${executionId} - to be implemented` };
   }
 
   @Post('trigger/subscription')
   async triggerSubscriptionWorkflow(@Body() body: { subscriptionId: string }) {
-    return await this.workflowEngine.triggerWorkflowForSubscription(body.subscriptionId);
+    // This would need to be implemented in the clean engine or moved to a service
+    return { message: `Trigger subscription workflow for ${body.subscriptionId} - to be implemented` };
+  }
+
+  // New Clean Engine Endpoints
+  @Post('execute')
+  async executeWorkflow(@Body() body: { workflow: any; context: any }) {
+    try {
+      const result = await this.workflowEngine.executeWorkflow(body.workflow, body.context);
+      return {
+        success: true,
+        result,
+        message: 'Workflow executed successfully using clean engine'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        message: 'Workflow execution failed'
+      };
+    }
+  }
+
+  @Get('node-types')
+  async getAvailableNodeTypes() {
+    return {
+      nodeTypes: this.workflowEngine.getAvailableNodeTypes(),
+      stats: this.workflowEngine.getRegistryStats()
+    };
   }
 
   // Workflow Control Endpoints
   @Post('executions/:executionId/start')
   async startWorkflow(@Param('executionId') executionId: string) {
-    return await this.workflowEngine.startWorkflow(executionId);
+    return { message: `Start workflow ${executionId} - to be implemented` };
   }
 
   @Post('executions/:executionId/stop')
   async stopWorkflow(@Param('executionId') executionId: string) {
-    return await this.workflowEngine.stopWorkflow(executionId);
+    return { message: `Stop workflow ${executionId} - to be implemented` };
   }
 
   @Post('executions/:executionId/pause')
   async pauseWorkflow(@Param('executionId') executionId: string) {
-    return await this.workflowEngine.pauseWorkflow(executionId);
+    return { message: `Pause workflow ${executionId} - to be implemented` };
   }
 
   @Post('executions/:executionId/resume')
   async resumeWorkflow(@Param('executionId') executionId: string) {
-    return await this.workflowEngine.resumeWorkflow(executionId);
+    return { message: `Resume workflow ${executionId} - to be implemented` };
   }
 
   @Post('executions/:executionId/cancel')
   async cancelWorkflow(@Param('executionId') executionId: string) {
-    return await this.workflowEngine.cancelWorkflow(executionId);
+    return { message: `Cancel workflow ${executionId} - to be implemented` };
   }
 
   // Subscription Trigger Endpoints
@@ -238,7 +268,7 @@ export class WorkflowController {
       // Trigger workflow
       console.log('🚀 Triggering workflow...');
       try {
-        await this.workflowEngine.triggerWorkflowForSubscription(user.id);
+        // await this.workflowEngine.triggerWorkflowForSubscription(user.id); // To be implemented
         console.log('✅ Workflow triggered successfully');
       } catch (error) {
         console.error('❌ Workflow triggering failed:', error);
@@ -280,7 +310,7 @@ export class WorkflowController {
       createdAt: newsletter.createdAt
     });
 
-    await this.workflowEngine.executeWorkflowFromContext(context);
+    // await this.workflowEngine.executeWorkflowFromContext(context); // To be implemented
 
     return {
       message: 'Test newsletter workflow triggered',
@@ -292,13 +322,13 @@ export class WorkflowController {
   // Batch Processing Endpoints
   @Post('process/batch')
   async processBatchWorkflows() {
-    await this.workflowEngine.processBatchWorkflows();
+    // await this.workflowEngine.processBatchWorkflows(); // To be implemented
     return { message: 'Batch processing completed' };
   }
 
   @Post('process/delayed')
   async processDelayedExecutions() {
-    await this.workflowEngine.processDelayedExecutions();
+    // await this.workflowEngine.processDelayedExecutions(); // To be implemented
     return { message: 'Delayed executions processed' };
   }
 

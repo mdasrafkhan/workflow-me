@@ -73,6 +73,7 @@ export class NewsletterTriggerService {
       triggerId: triggerData.id,
       userId: triggerData.userId,
       triggerData: triggerData.data,
+      data: triggerData.data,
       metadata: {
         email: triggerData.data.email,
         source: triggerData.data.source,

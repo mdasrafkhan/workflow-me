@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
-import { WorkflowExecutionEngine } from '../execution/workflow-execution-engine';
+import { WorkflowOrchestrationEngine } from '../execution/workflow-orchestration-engine';
 import { DummyDataService } from '../../services/dummy-data.service';
 import { EmailService } from '../../services/email.service';
 import { SubscriptionTriggerService } from '../../services/subscription-trigger.service';
@@ -20,7 +20,7 @@ import { EmailLog } from '../../database/entities/email-log.entity';
 
 describe('WorkflowExecutionEngine Integration Tests', () => {
   let app: TestingModule;
-  let workflowEngine: WorkflowExecutionEngine;
+  let workflowEngine: WorkflowOrchestrationEngine;
   let dummyDataService: DummyDataService;
   let emailService: EmailService;
   let userRepository: any;
@@ -67,7 +67,7 @@ describe('WorkflowExecutionEngine Integration Tests', () => {
         ])
       ],
       providers: [
-        WorkflowExecutionEngine,
+        WorkflowOrchestrationEngine,
         DummyDataService,
         EmailService,
         SubscriptionTriggerService,
@@ -79,7 +79,7 @@ describe('WorkflowExecutionEngine Integration Tests', () => {
       ]
     }).compile();
 
-    workflowEngine = app.get<WorkflowExecutionEngine>(WorkflowExecutionEngine);
+    workflowEngine = app.get<WorkflowOrchestrationEngine>(WorkflowOrchestrationEngine);
     dummyDataService = app.get<DummyDataService>(DummyDataService);
     emailService = app.get<EmailService>(EmailService);
 

@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { WorkflowExecutionEngine } from './workflow/execution/workflow-execution-engine';
+import { WorkflowOrchestrationEngine } from './workflow/execution/workflow-orchestration-engine';
 import { DummyDataService } from './services/dummy-data.service';
 import { WorkflowRecoveryService } from './services/workflow-recovery.service';
 
@@ -8,7 +8,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Get services
-  const workflowEngine = app.get(WorkflowExecutionEngine);
+  const workflowEngine = app.get(WorkflowOrchestrationEngine);
   const dummyDataService = app.get(DummyDataService);
   const recoveryService = app.get(WorkflowRecoveryService);
 

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { WorkflowExecutionEngine } from '../execution/workflow-execution-engine';
+import { WorkflowOrchestrationEngine } from '../execution/workflow-orchestration-engine';
 import { DummyDataService } from '../../services/dummy-data.service';
 import { EmailService } from '../../services/email.service';
 import { SubscriptionTriggerService } from '../../services/subscription-trigger.service';
@@ -11,7 +11,7 @@ import { WorkflowStateMachineService } from '../state-machine/workflow-state-mac
 import { WorkflowExecutor } from '../execution/WorkflowExecutor';
 
 describe('WorkflowExecutionEngine Simple Tests', () => {
-  let workflowEngine: WorkflowExecutionEngine;
+  let workflowEngine: WorkflowOrchestrationEngine;
   let workflowExecutor: WorkflowExecutor;
   let dummyDataService: DummyDataService;
   let emailService: EmailService;
@@ -19,7 +19,7 @@ describe('WorkflowExecutionEngine Simple Tests', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        WorkflowExecutionEngine,
+        WorkflowOrchestrationEngine,
         WorkflowExecutor,
         DummyDataService,
         EmailService,
@@ -89,7 +89,7 @@ describe('WorkflowExecutionEngine Simple Tests', () => {
       ],
     }).compile();
 
-    workflowEngine = module.get<WorkflowExecutionEngine>(WorkflowExecutionEngine);
+    workflowEngine = module.get<WorkflowOrchestrationEngine>(WorkflowOrchestrationEngine);
     workflowExecutor = module.get<WorkflowExecutor>(WorkflowExecutor);
     dummyDataService = module.get<DummyDataService>(DummyDataService);
     emailService = module.get<EmailService>(EmailService);
@@ -127,31 +127,31 @@ describe('WorkflowExecutionEngine Simple Tests', () => {
     const startResult = await workflowEngine.startWorkflow(executionId);
     expect(startResult).toBeDefined();
     expect(startResult.success).toBe(false); // Should fail because execution doesn't exist
-    expect(startResult.message).toContain('Execution not found');
+    expect(startResult.error).toContain('Execution not found');
 
     // Test stop workflow
     const stopResult = await workflowEngine.stopWorkflow(executionId);
     expect(stopResult).toBeDefined();
     expect(stopResult.success).toBe(false);
-    expect(stopResult.message).toContain('Execution not found');
+    expect(stopResult.error).toContain('Execution not found');
 
     // Test pause workflow
     const pauseResult = await workflowEngine.pauseWorkflow(executionId);
     expect(pauseResult).toBeDefined();
     expect(pauseResult.success).toBe(false);
-    expect(pauseResult.message).toContain('Execution not found');
+    expect(pauseResult.error).toContain('Execution not found');
 
     // Test resume workflow
     const resumeResult = await workflowEngine.resumeWorkflow(executionId);
     expect(resumeResult).toBeDefined();
     expect(resumeResult.success).toBe(false);
-    expect(resumeResult.message).toContain('Execution not found');
+    expect(resumeResult.error).toContain('Execution not found');
 
     // Test cancel workflow
     const cancelResult = await workflowEngine.cancelWorkflow(executionId);
     expect(cancelResult).toBeDefined();
     expect(cancelResult.success).toBe(false);
-    expect(cancelResult.message).toContain('Execution not found');
+    expect(cancelResult.error).toContain('Execution not found');
   });
 
   describe('Custom Operations Tests', () => {

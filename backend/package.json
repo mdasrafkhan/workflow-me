@@ -8,12 +8,15 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "build": "nest build",
+    "build:dev": "npm run build && npm run test:workflow:build",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:workflow": "jest --testPathPattern=workflow",
-    "test:runner": "npx ts-node src/test-runner.ts"
+    "test:workflow:build": "npx ts-node src/build-test.ts",
+    "test:runner": "npx ts-node src/test-runner.ts",
+    "test:clear": "npx ts-node src/clear-and-test.ts"
   },
   "jest": {
     "moduleFileExtensions": [

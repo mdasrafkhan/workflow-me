@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { WorkflowExecutionEngine } from './workflow/execution/workflow-execution-engine';
+import { WorkflowOrchestrationEngine } from './workflow/execution/workflow-orchestration-engine';
 import { DummyDataService } from './services/dummy-data.service';
 import { EmailService } from './services/email.service';
 
@@ -9,7 +9,7 @@ async function runWorkflowTests() {
 
   const app = await NestFactory.createApplicationContext(AppModule);
 
-  const workflowEngine = app.get(WorkflowExecutionEngine);
+  const workflowEngine = app.get(WorkflowOrchestrationEngine);
   const dummyDataService = app.get(DummyDataService);
   const emailService = app.get(EmailService);
 

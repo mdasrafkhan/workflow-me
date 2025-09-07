@@ -23,7 +23,7 @@ export class WorkflowExecution {
   userId: string;
 
   @Column()
-  status: 'pending' | 'running' | 'delayed' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'delayed' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
   @Column({ nullable: true })
   currentStep: string;

@@ -6,6 +6,7 @@ export interface WorkflowExecutionContext {
   triggerId: string;
   userId: string;
   triggerData: any;
+  data: any; // User/subscriber data
   metadata: Record<string, any>;
   createdAt: Date;
 }
@@ -102,6 +103,7 @@ export type WorkflowExecutionStatus =
   | 'pending'
   | 'running'
   | 'delayed'
+  | 'paused'
   | 'completed'
   | 'failed'
   | 'cancelled';

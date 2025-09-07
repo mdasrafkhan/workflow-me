@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
-import { WorkflowExecutionEngine } from './workflow/execution/workflow-execution-engine';
 import { DummyDataService } from './services/dummy-data.service';
 import { EmailService } from './services/email.service';
 import { SubscriptionTriggerService } from './services/subscription-trigger.service';
@@ -67,7 +66,6 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
   ],
   controllers: [HealthController, WorkflowController],
   providers: [
-    WorkflowExecutionEngine,
     DummyDataService,
     EmailService,
     SubscriptionTriggerService,
