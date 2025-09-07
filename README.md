@@ -68,6 +68,7 @@ graph TB
 
     subgraph "External Services"
         EMAIL[Email Service]
+        EMAIL_LOG[(Email Logs)]
         WEBHOOK[Webhook Service]
         SMS[SMS Service]
     end
@@ -85,6 +86,7 @@ graph TB
     WOE --> PG
     WOE --> RD
     NE --> EMAIL
+    EMAIL --> EMAIL_LOG
     NE --> WEBHOOK
     NE --> SMS
 ```
@@ -135,7 +137,6 @@ erDiagram
     WORKFLOW ||--o{ VISUAL_WORKFLOW : "has"
     WORKFLOW ||--o{ WORKFLOW_EXECUTION : "executes"
     WORKFLOW_EXECUTION ||--o{ WORKFLOW_DELAY : "suspends"
-    WORKFLOW_EXECUTION ||--o{ EMAIL_LOG : "generates"
 
     WORKFLOW {
         int id PK
@@ -176,17 +177,38 @@ erDiagram
         jsonb context
         timestamp createdAt
     }
-
-    EMAIL_LOG {
-        int id PK
-        string to
-        string subject
-        string templateId
-        string status
-        timestamp sentAt
-        timestamp createdAt
-    }
 ```
+
+### External Services
+
+The workflow system integrates with external services for business operations:
+
+- **Email Service** - Handles email sending and logging (separate concern)
+- **SMS Service** - Handles SMS notifications (future)
+- **Webhook Service** - Triggers external webhooks (future)
+- **Notification Service** - Centralized notification management (future)
+
+### Separation of Concerns
+
+The architecture follows a clean separation of concerns:
+
+#### **Core Workflow System**
+- Workflow definitions and execution
+- State management and persistence
+- Node executor coordination
+- Delay and timing management
+
+#### **External Services**
+- Email sending and logging
+- SMS notifications
+- Webhook triggers
+- External API integrations
+
+This separation allows for:
+- **Independent scaling** of services
+- **Technology flexibility** for each service
+- **Clear boundaries** between concerns
+- **Easier testing** and maintenance
 
 ## 🔧 Technical Implementation
 

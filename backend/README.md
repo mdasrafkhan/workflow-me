@@ -17,17 +17,44 @@ A sophisticated, enterprise-grade workflow automation platform built with NestJS
 9. **Error Handling** - Comprehensive retry and failure management
 10. **Testing Framework** - Automated test suite with safe data management
 
-### Database Schema
+### Core Database Schema
 
 - **workflow** (JsonLogicRule) - Workflow definitions with JSON Logic rules
 - **visual_workflow** - Visual workflow representations with React Flow data
 - **workflow_executions** - Workflow execution tracking and state management
 - **workflow_delays** - Delay scheduling and management
-- **email_logs** - Email sending audit trail
 - **dummy_users** - Test user data
 - **dummy_subscriptions** - Subscription records
 - **dummy_subscription_types** - Subscription type definitions
 - **dummy_newsletters** - Newsletter subscriptions
+
+### External Service Data
+
+- **email_logs** - Email sending audit trail (Email Service concern)
+- **sms_logs** - SMS sending audit trail (SMS Service concern)
+- **webhook_logs** - Webhook call audit trail (Webhook Service concern)
+
+### Architectural Separation
+
+The system follows a clean separation of concerns:
+
+#### **Core Workflow Engine**
+- Workflow orchestration and execution
+- State management and persistence
+- Node executor coordination
+- Delay and timing management
+- Visual workflow management
+
+#### **External Services**
+- **Email Service** - Handles email sending, templates, and logging
+- **SMS Service** - Handles SMS notifications (future)
+- **Webhook Service** - Handles external webhook calls (future)
+
+This separation allows for:
+- **Independent scaling** of each service
+- **Technology flexibility** for different service needs
+- **Clear boundaries** between workflow logic and business operations
+- **Easier testing** and maintenance
 
 ## 🚀 Features
 
