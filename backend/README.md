@@ -1,41 +1,50 @@
 # Workflow Execution Engine
 
-A robust, state-machine-based workflow execution system built with NestJS, TypeORM, and XState. This system processes subscription and newsletter workflows with real-time batch processing, delay handling, and comprehensive error recovery.
+A sophisticated, enterprise-grade workflow automation platform built with NestJS, TypeORM, and modern web technologies. This system provides visual workflow creation, execution orchestration, and comprehensive state management for complex business processes.
 
 ## 🏗️ Architecture
 
 ### Core Components
 
-1. **State Machine Framework** - XState-based workflow execution
-2. **Batch Processing** - 30-second interval processing
-3. **Delay Management** - Handles time-based workflow steps
-4. **Email Service** - Template-based email sending with logging
-5. **Database Layer** - PostgreSQL with UTC timestamps
-6. **Error Handling** - Comprehensive retry and failure management
+1. **Workflow Orchestration Engine** - Central workflow execution coordinator
+2. **Node Executor System** - Plugin-based architecture with specialized executors
+3. **Visual Workflow Management** - React Flow integration with JSON Logic
+4. **Batch Processing** - 30-second interval processing with cron scheduling
+5. **Delay Management** - Sophisticated delay and timing controls
+6. **Email Service** - Template-based email sending with comprehensive logging
+7. **Database Layer** - PostgreSQL with proper foreign key relationships
+8. **State Management** - XState for complex state machines
+9. **Error Handling** - Comprehensive retry and failure management
+10. **Testing Framework** - Automated test suite with safe data management
 
 ### Database Schema
 
+- **workflow** (JsonLogicRule) - Workflow definitions with JSON Logic rules
+- **visual_workflow** - Visual workflow representations with React Flow data
+- **workflow_executions** - Workflow execution tracking and state management
+- **workflow_delays** - Delay scheduling and management
+- **email_logs** - Email sending audit trail
 - **dummy_users** - Test user data
 - **dummy_subscriptions** - Subscription records
 - **dummy_subscription_types** - Subscription type definitions
 - **dummy_newsletters** - Newsletter subscriptions
-- **workflow_executions** - Workflow execution tracking
-- **workflow_delays** - Delay scheduling and management
-- **email_logs** - Email sending audit trail
 
 ## 🚀 Features
 
-### Workflow Types
+### Node Executor System
 
-1. **Segmented Welcome Flow**
-   - Product-specific branching (United, Podcast, Generic)
-   - Welcome emails based on product type
-   - Shared follow-up sequence
-   - 2-day and 5-day delays between steps
+1. **Action Node** - Executes business actions (email, SMS, webhook)
+2. **Delay Node** - Manages workflow suspension and resumption
+3. **Condition Node** - Evaluates JSON Logic expressions for branching
+4. **Shared Flow Node** - Executes reusable workflow components
+5. **Webhook Node** - Triggers external webhook calls
 
-2. **Newsletter Welcome Flow**
-   - Simple newsletter subscription workflow
-   - Welcome email with preferences
+### Visual Workflow Management
+
+- **React Flow Integration** - Drag-and-drop workflow editor
+- **JSON Logic Conversion** - Automatic conversion from visual to logic
+- **Cascade Delete** - Proper data relationship management
+- **Workflow Persistence** - Save and load workflows from database
 
 ### State Management
 
@@ -43,6 +52,7 @@ A robust, state-machine-based workflow execution system built with NestJS, TypeO
 - **Step-by-step history** with timestamps and results
 - **Error logging** with retry mechanisms
 - **Delay scheduling** with automatic resumption
+- **XState Integration** - Complex state machine management
 
 ### Email System
 
@@ -50,6 +60,7 @@ A robust, state-machine-based workflow execution system built with NestJS, TypeO
 - **Mock mode** for development and testing
 - **SMTP integration** for production
 - **Comprehensive logging** of all email activities
+- **Multiple action types** - send_email, send_sms, trigger_webhook
 
 ## 📦 Installation
 
@@ -69,7 +80,7 @@ npm run start:dev
 
 ## 🧪 Testing
 
-### Integration Tests
+### Comprehensive Test Suite
 
 ```bash
 # Run all tests
@@ -80,17 +91,30 @@ npm run test:workflow
 
 # Run with coverage
 npm run test:cov
-```
 
-### Manual Testing
+# Run comprehensive build tests
+npm run test:workflow:build
 
-```bash
+# Clear test data safely
+npm run test:clear
+
 # Run test runner script
 npm run test:runner
-
-# Or run directly
-npx ts-node src/test-runner.ts
 ```
+
+### Test Types
+
+1. **Unit Tests** - Individual component testing
+2. **Integration Tests** - Workflow execution testing
+3. **Build Tests** - Automated workflow validation
+4. **Cleanup Tests** - Safe data management
+
+### Test Data Management
+
+- **Test Prefix** - All test data uses `test-` prefix
+- **Safe Cleanup** - Only test data is removed during cleanup
+- **Isolation** - Tests don't affect production data
+- **Automation** - Tests run on every build
 
 ## 🔧 Configuration
 
@@ -316,31 +340,49 @@ All emails are logged with:
 
 ## 📚 API Reference
 
-### WorkflowExecutionEngine
+### Workflow Management
 
-- `processBatchWorkflows()` - Main batch processing
-- `processDelayedExecutions()` - Handle delayed steps
-- `executeSubscriptionWorkflow()` - Process subscription
-- `executeNewsletterWorkflow()` - Process newsletter
-- `triggerWorkflowForSubscription()` - Manual trigger
-- `getExecutionStatus()` - Get execution status
-- `getAllExecutions()` - List all executions
+- `POST /workflow/execute` - Execute workflow with context
+- `GET /workflow/node-types` - Get available node types
+- `GET /workflow/executions` - List all executions
+- `GET /workflow/executions/:id` - Get execution details
+- `POST /workflow/executions/:id/start` - Start workflow
+- `POST /workflow/executions/:id/stop` - Stop workflow
+- `POST /workflow/executions/:id/pause` - Pause workflow
+- `POST /workflow/executions/:id/resume` - Resume workflow
+- `POST /workflow/executions/:id/cancel` - Cancel workflow
 
-### DummyDataService
+### Visual Workflow Management
 
-- `initializeDummyData()` - Set up test data
-- `createSubscription()` - Create test subscription
-- `createNewsletterSubscription()` - Create test newsletter
-- `getUnprocessedSubscriptions()` - Get new subscriptions
-- `getUnprocessedNewsletters()` - Get new newsletters
-- `markSubscriptionProcessed()` - Mark as processed
-- `markNewsletterProcessed()` - Mark as processed
+- `GET /workflow/visual-workflows` - List visual workflows
+- `GET /workflow/visual-workflows/:id` - Get visual workflow
+- `POST /workflow/visual-workflows` - Create/update visual workflow
+- `POST /workflow/visual-workflows/:id/delete` - Delete visual workflow
 
-### EmailService
+### Trigger Management
 
-- `sendEmail()` - Send email with template
-- `getEmailStats()` - Get email statistics
-- `getEmailsForExecution()` - Get execution emails
+- `GET /workflow/triggers/subscriptions` - Get subscription triggers
+- `POST /workflow/triggers/subscriptions/create` - Create subscription
+- `GET /workflow/triggers/newsletters` - Get newsletter triggers
+- `POST /workflow/triggers/newsletters/create` - Create newsletter
+- `POST /workflow/triggers/newsletters/:id/unsubscribe` - Unsubscribe
+
+### Testing & Recovery
+
+- `POST /workflow/test/subscription` - Test subscription workflow
+- `POST /workflow/test/newsletter` - Test newsletter workflow
+- `POST /workflow/process/batch` - Process batch workflows
+- `POST /workflow/process/delayed` - Process delayed executions
+- `POST /workflow/recovery/recover` - Recover workflows
+- `GET /workflow/recovery/statistics` - Get recovery statistics
+
+### Health & Monitoring
+
+- `GET /health` - System health check
+- `GET /health/ready` - Readiness check
+- `GET /health/live` - Liveness check
+- `GET /workflow/emails/statistics` - Email statistics
+- `GET /workflow/emails/:executionId` - Get execution emails
 
 ## 🤝 Contributing
 
@@ -363,6 +405,40 @@ For issues and questions:
 3. **Run the test suite** to verify setup
 4. **Check database connectivity** and permissions
 5. **Verify email configuration** and SMTP settings
+
+## 🔧 Build Scripts
+
+### Available Scripts
+
+```bash
+# Development
+npm run start:dev          # Start with hot reload
+npm run build              # Build for production
+npm run build:dev          # Build and run tests
+
+# Testing
+npm run test               # Run all tests
+npm run test:workflow      # Run workflow tests
+npm run test:workflow:build # Run comprehensive build tests
+npm run test:clear         # Clear test data safely
+npm run test:runner        # Run test runner
+
+# Production
+npm run start:prod         # Start production server
+```
+
+### Build Test Integration
+
+The `build:dev` script automatically:
+1. **Builds** the application
+2. **Runs comprehensive tests** including:
+   - Workflow execution tests
+   - Visual workflow tests
+   - Cascade delete tests
+   - Node executor tests
+   - Delay processing tests
+3. **Validates** all components work correctly
+4. **Cleans up** test data safely
 
 ## 🔮 Future Enhancements
 
