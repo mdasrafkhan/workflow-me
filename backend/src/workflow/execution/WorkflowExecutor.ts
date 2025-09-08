@@ -7,7 +7,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { WorkflowExecutionResult, WorkflowExecutionContext, ExecutionStep } from './types';
+import { WorkflowExecutionResult, ExecutionStep } from './types';
+import { WorkflowExecutionContext } from '../types';
 import { ActionService, ActionContext } from '../../services/action.service';
 import { SharedFlowService } from '../../services/shared-flow.service';
 import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
@@ -28,7 +29,7 @@ export class WorkflowExecutor {
    * Execute a workflow with enhanced error handling and logging
    */
   async executeWorkflow(
-    workflowId: number,
+    workflowId: string,
     jsonLogicRule: any,
     context: WorkflowExecutionContext
   ): Promise<WorkflowExecutionResult> {
@@ -312,7 +313,7 @@ export class WorkflowExecutor {
         executeAt: executeAt,
         status: 'pending',
         context: {
-          workflowId: context.metadata?.workflowId || 0,
+          workflowId: context.workflowId || 'unknown',
           userId: context.metadata?.userId || 'unknown',
           originalDelayType: delay.type, // Keep original for reference
           ...context.data
@@ -335,7 +336,7 @@ export class WorkflowExecutor {
           hours: delayHours,
           scheduledAt: scheduledAt.toISOString(),
           executeAt: executeAt.toISOString(),
-          workflowId: context.metadata?.workflowId || 0,
+          workflowId: context.workflowId || 'unknown',
           executionId: executionId,
           userId: context.metadata?.userId || 'unknown',
           status: 'pending'
@@ -733,7 +734,16 @@ export class WorkflowExecutor {
         "execute": true
       };
 
-      const context = {
+      const context: WorkflowExecutionContext = {
+        executionId: 'test-execution',
+        workflowId: 'test-workflow',
+        triggerType: 'test',
+        triggerId: 'test-trigger',
+        userId: 'test-user',
+        triggerData: {
+          source: 'test',
+          timestamp: new Date()
+        },
         data: {
           subscription_package: "premium",
           user_id: "test-user"
@@ -742,7 +752,8 @@ export class WorkflowExecutor {
           source: 'test',
           timestamp: new Date(),
           userId: 'test-user'
-        }
+        },
+        createdAt: new Date()
       };
 
       // Use our custom execution engine instead of standard JsonLogic
@@ -1103,7 +1114,7 @@ export class WorkflowExecutor {
         // Create a compatible context for SharedFlowService
         const compatibleContext = {
           executionId: 'unknown',
-          workflowId: context.metadata?.workflowId?.toString() || '0',
+          workflowId: context.workflowId || 'unknown',
           triggerType: 'manual',
           triggerId: 'unknown',
           userId: context.metadata?.userId || 'unknown',

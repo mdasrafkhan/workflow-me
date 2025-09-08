@@ -9,7 +9,7 @@ export interface WorkflowExecutionContext {
     timestamp?: Date;
     userId?: string;
     sessionId?: string;
-    workflowId?: number;
+    workflowId?: string;
   };
 }
 
@@ -26,7 +26,7 @@ export interface ExecutionStep {
 
 export interface WorkflowExecutionResult {
   executionId: string;
-  workflowId: number;
+  workflowId: string;
   success: boolean;
   result?: any;
   error?: string;
@@ -37,7 +37,7 @@ export interface WorkflowExecutionResult {
 
 export interface WorkflowExecutionHistory {
   executionId: string;
-  workflowId: number;
+  workflowId: string;
   userId?: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   startTime: Date;
@@ -60,10 +60,10 @@ export interface WorkflowMetrics {
 }
 
 export interface WorkflowScheduler {
-  scheduleWorkflow(workflowId: number, cronExpression: string): Promise<void>;
-  unscheduleWorkflow(workflowId: number): Promise<void>;
+  scheduleWorkflow(workflowId: string, cronExpression: string): Promise<void>;
+  unscheduleWorkflow(workflowId: string): Promise<void>;
   getScheduledWorkflows(): Promise<Array<{
-    workflowId: number;
+    workflowId: string;
     cronExpression: string;
     nextExecution: Date;
   }>>;

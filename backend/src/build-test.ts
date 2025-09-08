@@ -65,19 +65,21 @@ class WorkflowTestSuite {
     console.log('🧹 Cleaning up test data...');
 
     try {
-      // Clear test data with test- prefix using proper TypeORM syntax
+      // Clear test workflow executions (only those with test patterns)
       await this.executionRepo
         .createQueryBuilder()
         .delete()
-        .where("executionId LIKE :pattern", { pattern: 'test-%' })
+        .where("executionId LIKE :pattern OR workflowId LIKE :pattern", { pattern: 'test-%' })
         .execute();
 
+      // Clear test workflow delays (only those with test patterns)
       await this.delayRepo
         .createQueryBuilder()
         .delete()
         .where("executionId LIKE :pattern", { pattern: 'test-%' })
         .execute();
 
+      // Clear test emails
       await this.emailRepo
         .createQueryBuilder()
         .delete()
@@ -556,7 +558,10 @@ class WorkflowTestSuite {
   async runAllTests(): Promise<boolean> {
     console.log('🚀 Starting Workflow Test Suite...\n');
 
+    // Clean up before tests
     await this.cleanupTestData();
+
+    // Run all tests
     await this.testBasicWorkflowExecution();
     await this.testNewsletterWorkflow();
     await this.testWorkflowStates();
@@ -567,6 +572,10 @@ class WorkflowTestSuite {
     await this.testWorkflowsWithoutVisualWorkflows();
     await this.testVisualWorkflowsWithJsonLogic();
     await this.testCascadeDeleteBehavior();
+
+    // Clean up after tests
+    console.log('\n🧹 Final cleanup after tests...');
+    await this.cleanupTestData();
 
     // Summary
     console.log('\n📊 Test Results Summary:');

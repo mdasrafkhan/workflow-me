@@ -56,6 +56,9 @@ export class ActionService {
         case 'update_subscription':
           result = await this.executeUpdateSubscriptionAction(actionName, actionDetails, userData, metadata);
           break;
+        case 'custom':
+          result = await this.executeCustomAction(actionName, actionDetails, userData, metadata);
+          break;
         default:
           throw new Error(`Unknown action type: ${actionType}`);
       }
@@ -342,6 +345,38 @@ export class ActionService {
       'send_notification',
       'update_subscription'
     ];
+  }
+
+  /**
+   * Execute custom action
+   */
+  private async executeCustomAction(
+    actionName: string,
+    actionDetails: any,
+    userData: any,
+    metadata: any
+  ): Promise<any> {
+    this.logger.log(`Executing custom action: ${actionName}`);
+
+    // Mock implementation for custom actions
+    const result = {
+      success: true,
+      action: 'custom',
+      actionName,
+      result: {
+        executed: true,
+        actionType: actionDetails.actionType || 'custom',
+        executedAt: new Date().toISOString()
+      },
+      metadata: {
+        userId: userData.id,
+        timestamp: new Date().toISOString(),
+        ...metadata
+      }
+    };
+
+    this.logger.log(`Custom action ${actionName} completed successfully`);
+    return result;
   }
 
   /**

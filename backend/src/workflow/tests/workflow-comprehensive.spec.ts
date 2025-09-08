@@ -17,6 +17,9 @@ import { DummyNewsletter } from '../../database/entities/dummy-newsletter.entity
 import { WorkflowExecution } from '../../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
 import { EmailLog } from '../../database/entities/email-log.entity';
+import { VisualWorkflow } from '../visual-workflow.entity';
+import { JsonLogicRule } from '../json-logic-rule.entity';
+import { NodeRegistryService } from '../nodes/registry/node-registry.service';
 
 describe('Comprehensive Workflow System Tests', () => {
   let app: TestingModule;
@@ -56,7 +59,9 @@ describe('Comprehensive Workflow System Tests', () => {
             DummyNewsletter,
             WorkflowExecution,
             WorkflowDelay,
-            EmailLog
+            EmailLog,
+            VisualWorkflow,
+            JsonLogicRule
           ],
           synchronize: true,
           logging: false
@@ -68,7 +73,9 @@ describe('Comprehensive Workflow System Tests', () => {
           DummyNewsletter,
           WorkflowExecution,
           WorkflowDelay,
-          EmailLog
+          EmailLog,
+          VisualWorkflow,
+          JsonLogicRule
         ])
       ],
       providers: [
@@ -80,7 +87,8 @@ describe('Comprehensive Workflow System Tests', () => {
         SharedFlowService,
         WorkflowActionService,
         WorkflowRecoveryService,
-        WorkflowStateMachineService
+        WorkflowStateMachineService,
+        NodeRegistryService
       ]
     }).compile();
 

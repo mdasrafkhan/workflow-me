@@ -4,9 +4,9 @@ import {
   ExecutionResult,
   ValidationResult,
   WorkflowStep,
-  WorkflowExecutionContext,
   WorkflowExecution
 } from '../interfaces/node-executor.interface';
+import { WorkflowExecutionContext } from '../../types';
 import { SharedFlowService } from '../../../services/shared-flow.service';
 
 /**
@@ -40,7 +40,7 @@ export class SharedFlowNodeExecutor extends BaseNodeExecutor {
       // Create compatible context for SharedFlowService
       const compatibleContext = {
         executionId: execution.id,
-        workflowId: context.metadata?.workflowId?.toString() || '0',
+        workflowId: context.workflowId || 'unknown',
         triggerType: 'manual',
         triggerId: 'unknown',
         userId: context.metadata?.userId || 'unknown',

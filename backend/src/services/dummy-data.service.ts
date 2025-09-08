@@ -7,7 +7,6 @@ import { DummySubscriptionType } from '../database/entities/dummy-subscription-t
 import { DummyNewsletter } from '../database/entities/dummy-newsletter.entity';
 import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../database/entities/workflow-delay.entity';
-import { EmailLog } from '../database/entities/email-log.entity';
 
 @Injectable()
 export class DummyDataService {
@@ -24,8 +23,6 @@ export class DummyDataService {
     public readonly executionRepository: Repository<WorkflowExecution>,
     @InjectRepository(WorkflowDelay)
     public readonly delayRepository: Repository<WorkflowDelay>,
-    @InjectRepository(EmailLog)
-    public readonly emailLogRepository: Repository<EmailLog>,
   ) {}
 
   // Initialize dummy data

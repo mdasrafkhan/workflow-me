@@ -42,8 +42,9 @@ export class WorkflowOrchestrationEngine {
   /**
    * Main batch processing - runs every 30 seconds
    * ONLY handles orchestration, no business logic
+   * DISABLED: Now handled by main workflow cron job
    */
-  @Cron(CronExpression.EVERY_30_SECONDS)
+  // @Cron(CronExpression.EVERY_30_SECONDS)
   async processBatchWorkflows(): Promise<void> {
     const startTime = Date.now();
     this.logger.log('Starting batch workflow processing...');
@@ -126,7 +127,7 @@ export class WorkflowOrchestrationEngine {
 
     try {
       // Create execution record
-      const execution = await this.createExecutionRecord(executionId, workflow.id, context);
+      const execution = await this.createExecutionRecord(executionId, context.workflowId, context);
 
       // Execute workflow steps using node registry
       const result = await this.executeWorkflowSteps(workflow, context, execution);
@@ -296,9 +297,9 @@ export class WorkflowOrchestrationEngine {
     const execution = this.executionRepository.create({
       executionId: executionId,
       workflowId: workflowId,
-      triggerType: 'manual',
-      triggerId: 'unknown',
-      userId: context.metadata?.userId || 'unknown',
+      triggerType: context.triggerType || 'manual',
+      triggerId: context.triggerId || 'unknown',
+      userId: context.userId || 'unknown',
       status: 'running',
       currentStep: 'start',
       workflowDefinition: {}, // Add required workflowDefinition field

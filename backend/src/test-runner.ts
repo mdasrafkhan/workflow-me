@@ -171,7 +171,7 @@ async function runWorkflowTests() {
     console.log(`- Newsletters: ${await dummyDataService.newsletterRepository.count()}`);
     console.log(`- Executions: ${await dummyDataService.executionRepository.count()}`);
     console.log(`- Delays: ${await dummyDataService.delayRepository.count()}`);
-    console.log(`- Emails: ${await dummyDataService.emailLogRepository.count()}`);
+    console.log(`- Emails: 0 (external service)`);
 
   } catch (error) {
     console.error('❌ Test failed:', error);

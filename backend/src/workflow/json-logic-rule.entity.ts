@@ -3,8 +3,8 @@ import { VisualWorkflow } from './visual-workflow.entity';
 
 @Entity('workflow')
 export class JsonLogicRule {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column('jsonb')
   rule: any; // The actual JsonLogic rule

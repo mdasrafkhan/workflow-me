@@ -6,9 +6,9 @@ import {
   ExecutionResult,
   ValidationResult,
   WorkflowStep,
-  WorkflowExecutionContext,
   WorkflowExecution
 } from '../interfaces/node-executor.interface';
+import { WorkflowExecutionContext } from '../../types';
 import { WorkflowDelay } from '../../../database/entities/workflow-delay.entity';
 
 /**
@@ -59,8 +59,8 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
         executeAt: executeAt,
         status: 'pending',
         context: {
-          workflowId: context.metadata?.workflowId || 0,
-          userId: context.metadata?.userId || 'unknown',
+          workflowId: context.workflowId || 'unknown',
+          userId: context.userId || 'unknown',
           originalDelayType: delayData.type,
           ...context.data
         },

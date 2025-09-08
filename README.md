@@ -24,6 +24,7 @@ The Workflow Management System is built on a microservices architecture with cle
 - **Delay Management**: Sophisticated delay and timing controls
 - **State Persistence**: Complete workflow state tracking and recovery
 - **JSON Logic Integration**: Decoupled business logic from visual representation
+- **UUID-Based Architecture**: Globally unique identifiers for data integrity
 - **Cascade Delete**: Proper data relationship management
 - **Comprehensive Testing**: Automated test suite with cleanup management
 
@@ -139,26 +140,26 @@ erDiagram
     WORKFLOW_EXECUTION ||--o{ WORKFLOW_DELAY : "suspends"
 
     WORKFLOW {
-        int id PK
+        uuid id PK
         jsonb rule
         timestamp createdAt
         timestamp updatedAt
     }
 
     VISUAL_WORKFLOW {
-        int id PK
+        uuid id PK
         string name
         jsonb nodes
         jsonb edges
-        int jsonLogicRuleId FK
+        uuid workflowId FK
         timestamp createdAt
         timestamp updatedAt
     }
 
     WORKFLOW_EXECUTION {
-        int id PK
+        uuid id PK
         string executionId UK
-        string workflowId
+        uuid workflowId FK
         string status
         jsonb state
         string userId
@@ -167,15 +168,20 @@ erDiagram
     }
 
     WORKFLOW_DELAY {
-        int id PK
+        uuid id PK
         string executionId FK
         string stepId
         string delayType
-        int delayMs
+        bigint delayMs
         timestamp executeAt
         string status
         jsonb context
+        jsonb result
+        text error
+        int retryCount
+        timestamp executedAt
         timestamp createdAt
+        timestamp updatedAt
     }
 ```
 
@@ -211,6 +217,26 @@ This separation allows for:
 - **Easier testing** and maintenance
 
 ## 🔧 Technical Implementation
+
+### UUID-Based Architecture
+
+The system uses UUIDs (Universally Unique Identifiers) for all primary keys and foreign key relationships, ensuring:
+
+- **Global Uniqueness**: No ID conflicts across distributed systems
+- **Data Integrity**: Proper foreign key relationships with UUID references
+- **Scalability**: Support for horizontal scaling and microservices
+- **Security**: Non-sequential IDs prevent enumeration attacks
+- **Consistency**: All entities use the same ID format throughout the system
+
+#### Database Migration
+
+The system has been migrated from auto-incrementing integer IDs to UUIDs:
+
+- **Primary Keys**: All tables use UUID primary keys
+- **Foreign Keys**: All relationships reference UUIDs
+- **Column Rename**: `jsonLogicRuleId` → `workflowId` for clarity
+- **Data Preservation**: Existing data migrated with proper UUID mapping
+- **Constraint Updates**: All foreign key constraints updated for UUID references
 
 ### Workflow Orchestration Engine
 
@@ -325,8 +351,9 @@ const workflowMachine = createMachine({
 4. **Access the application:**
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:4000
-   - Database: localhost:5432
-   - Redis: localhost:6379
+   - Database: localhost:15432
+   - Redis: localhost:16379
+   - Adminer (DB Admin): http://localhost:8080
 
 ### Development Setup
 
@@ -486,14 +513,14 @@ npm run test:workflow
 ```bash
 # Database Configuration
 DB_HOST=localhost
-DB_PORT=5432
+DB_PORT=15432
 DB_USER=workflow_user
 DB_PASSWORD=workflow_password
 DB_NAME=workflow_db
 
 # Redis Configuration
 REDIS_HOST=localhost
-REDIS_PORT=6379
+REDIS_PORT=16379
 
 # Application Configuration
 NODE_ENV=development
@@ -572,20 +599,20 @@ services:
 
 ### Workflow Management
 
-- `POST /workflows` - Create workflow
-- `GET /workflows` - List workflows
-- `GET /workflows/:id` - Get workflow details
-- `PUT /workflows/:id` - Update workflow
-- `DELETE /workflows/:id` - Delete workflow
+- `POST /workflow/visual-workflows` - Create workflow
+- `GET /workflow/visual-workflows` - List workflows
+- `GET /workflow/visual-workflows/:id` - Get workflow details (UUID)
+- `PUT /workflow/visual-workflows/:id` - Update workflow (UUID)
+- `DELETE /workflow/visual-workflows/:id` - Delete workflow (UUID)
 
 ### Execution Management
 
-- `POST /workflows/:id/execute` - Execute workflow
-- `GET /executions` - List executions
-- `GET /executions/:id` - Get execution details
-- `POST /executions/:id/pause` - Pause execution
-- `POST /executions/:id/resume` - Resume execution
-- `POST /executions/:id/cancel` - Cancel execution
+- `POST /workflow/visual-workflows/:id/execute` - Execute workflow (UUID)
+- `GET /workflow/executions` - List executions
+- `GET /workflow/executions/:id` - Get execution details (UUID)
+- `POST /workflow/executions/:id/pause` - Pause execution (UUID)
+- `POST /workflow/executions/:id/resume` - Resume execution (UUID)
+- `POST /workflow/executions/:id/cancel` - Cancel execution (UUID)
 
 ### Health & Monitoring
 

@@ -360,13 +360,13 @@ export class WorkflowController {
   }
 
   @Get('visual-workflows/:id')
-  async getVisualWorkflow(@Param('id') id: number) {
+  async getVisualWorkflow(@Param('id') id: string) {
     return await this.workflowService.findOne(id);
   }
 
   @Post('visual-workflows')
   async createOrUpdateVisualWorkflow(@Body() data: {
-    id?: number;
+    id?: string;
     name: string;
     nodes: any;
     edges: any;
@@ -376,7 +376,7 @@ export class WorkflowController {
   }
 
   @Post('visual-workflows/:id/delete')
-  async deleteVisualWorkflow(@Param('id') id: number) {
+  async deleteVisualWorkflow(@Param('id') id: string) {
     await this.workflowService.remove(id);
     return { message: 'Workflow deleted successfully' };
   }

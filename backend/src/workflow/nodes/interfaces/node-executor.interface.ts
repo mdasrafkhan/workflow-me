@@ -80,7 +80,7 @@ export interface WorkflowExecutionContext {
     timestamp?: Date;
     userId?: string;
     sessionId?: string;
-    workflowId?: number;
+    workflowId?: string;
   };
 }
 

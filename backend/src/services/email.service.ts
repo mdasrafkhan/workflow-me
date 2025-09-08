@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import * as nodemailer from 'nodemailer';
 import * as Handlebars from 'handlebars';
-import { EmailLog } from '../database/entities/email-log.entity';
 import { EmailActionData, EmailStatus } from '../workflow/types';
 
 @Injectable()
@@ -12,10 +9,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
   private templates = new Map<string, HandlebarsTemplateDelegate>();
 
-  constructor(
-    @InjectRepository(EmailLog)
-    private readonly emailLogRepository: Repository<EmailLog>,
-  ) {
+  constructor() {
     this.initializeTransporter();
     this.initializeTemplates();
   }
@@ -292,17 +286,12 @@ export class EmailService {
       const html = template({ subject, ...data });
       const text = this.htmlToText(html);
 
-      // Create email log
-      const emailLog = this.emailLogRepository.create({
-        executionId: executionId || 'unknown',
-        stepId: stepId || 'unknown',
-        to,
-        subject,
-        templateId,
-        data,
-        status: 'sent',
-        sentAt: new Date()
-      });
+      // Log email as external service call
+      this.logger.log(`📧 [EXTERNAL EMAIL SERVICE] Sending email to ${to}`);
+      this.logger.log(`   Subject: ${subject}`);
+      this.logger.log(`   Template: ${templateId}`);
+      this.logger.log(`   Execution ID: ${executionId || 'unknown'}`);
+      this.logger.log(`   Step ID: ${stepId || 'unknown'}`);
 
       // Send email (or mock in development)
       if (process.env.NODE_ENV === 'production' && this.transporter) {
@@ -314,45 +303,27 @@ export class EmailService {
           html
         });
 
-        emailLog.providerResponse = { messageId: info.messageId };
-        emailLog.status = 'sent';
-
-        this.logger.log(`Email sent successfully to ${to}: ${info.messageId}`);
+        this.logger.log(`✅ Email sent successfully to ${to}: ${info.messageId}`);
       } else {
         // Mock mode for development/testing
-        emailLog.providerResponse = { messageId: `mock-${Date.now()}` };
-        emailLog.status = 'sent';
-
         this.logger.log(`[MOCK] Email would be sent to ${to} with subject: ${subject}`);
         this.logger.log(`[MOCK] Template: ${templateId}`);
         this.logger.log(`[MOCK] Data:`, data);
       }
 
-      // Save email log
-      await this.emailLogRepository.save(emailLog);
-
       return {
         success: true,
-        messageId: emailLog.providerResponse?.messageId
+        messageId: `email-${Date.now()}`
       };
 
     } catch (error) {
       this.logger.error(`Failed to send email to ${to}:`, error);
 
-      // Log failed email
-      if (executionId && stepId) {
-        await this.emailLogRepository.save({
-          executionId,
-          stepId,
-          to,
-          subject,
-          templateId,
-          data,
-          status: 'failed',
-          error: error.message,
-          sentAt: new Date()
-        });
-      }
+      // Log failed email as external service error
+      this.logger.error(`❌ [EXTERNAL EMAIL SERVICE] Failed to send email to ${to}`);
+      this.logger.error(`   Error: ${error.message}`);
+      this.logger.error(`   Execution ID: ${executionId || 'unknown'}`);
+      this.logger.error(`   Step ID: ${stepId || 'unknown'}`);
 
       return {
         success: false,
@@ -382,33 +353,20 @@ export class EmailService {
     failed: number;
     byTemplate: Record<string, number>;
   }> {
-    const query = this.emailLogRepository.createQueryBuilder('email');
+    this.logger.log(`📧 [EXTERNAL EMAIL SERVICE] Requesting email stats for execution: ${executionId || 'all'}`);
 
-    if (executionId) {
-      query.where('email.executionId = :executionId', { executionId });
-    }
-
-    const emails = await query.getMany();
-
-    const stats = {
-      total: emails.length,
-      sent: emails.filter(e => e.status === 'sent').length,
-      failed: emails.filter(e => e.status === 'failed').length,
-      byTemplate: {} as Record<string, number>
+    // External service - return empty stats
+    return {
+      total: 0,
+      sent: 0,
+      failed: 0,
+      byTemplate: {}
     };
-
-    emails.forEach(email => {
-      stats.byTemplate[email.templateId] = (stats.byTemplate[email.templateId] || 0) + 1;
-    });
-
-    return stats;
   }
 
-  // Get emails for execution
-  async getEmailsForExecution(executionId: string): Promise<EmailLog[]> {
-    return await this.emailLogRepository.find({
-      where: { executionId },
-      order: { sentAt: 'ASC' }
-    });
+  // Get emails for execution (external service - return empty array)
+  async getEmailsForExecution(executionId: string): Promise<any[]> {
+    this.logger.log(`📧 [EXTERNAL EMAIL SERVICE] Requesting emails for execution: ${executionId}`);
+    return []; // External service - no local storage
   }
 }

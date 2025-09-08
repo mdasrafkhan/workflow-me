@@ -48,7 +48,7 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
         VisualWorkflow,
         JsonLogicRule
       ],
-      synchronize: process.env.NODE_ENV !== 'production',
+      synchronize: false, // Disabled to prevent conflicts with manual UUID migration
       logging: process.env.NODE_ENV === 'development'
     }),
     TypeOrmModule.forFeature([

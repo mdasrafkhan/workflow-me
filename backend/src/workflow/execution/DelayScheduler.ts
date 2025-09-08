@@ -9,7 +9,7 @@ import { Repository } from 'typeorm';
 
 export interface DelayExecution {
   id: string;
-  workflowId: number;
+  workflowId: string;
   executionId: string;
   userId: string;
   delayType: 'fixed' | 'random';
@@ -36,7 +36,7 @@ export class DelayScheduler {
    * Schedule a delay execution
    */
   async scheduleDelay(
-    workflowId: number,
+    workflowId: string,
     executionId: string,
     userId: string,
     delayConfig: {
@@ -135,7 +135,7 @@ export class DelayScheduler {
       max_hours?: number;
     },
     executionContext: {
-      workflowId: number;
+      workflowId: string;
       executionId: string;
       userId: string;
       scheduledAt: Date;

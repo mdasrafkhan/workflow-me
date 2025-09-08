@@ -20,7 +20,6 @@ import { DummySubscriptionType } from '../database/entities/dummy-subscription-t
 import { DummyNewsletter } from '../database/entities/dummy-newsletter.entity';
 import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../database/entities/workflow-delay.entity';
-import { EmailLog } from '../database/entities/email-log.entity';
 import { DummyDataService } from '../services/dummy-data.service';
 import { WorkflowStateMachineService } from './state-machine/workflow-state-machine';
 import { NodesModule } from './nodes/nodes.module';
@@ -35,8 +34,7 @@ import { NodesModule } from './nodes/nodes.module';
       DummySubscriptionType,
       DummyNewsletter,
       WorkflowExecution,
-      WorkflowDelay,
-      EmailLog
+      WorkflowDelay
     ]),
     NodesModule // Import the new nodes module
   ],

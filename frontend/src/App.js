@@ -179,6 +179,21 @@ const createNodeTypes = (setSelectedNodeId) => {
 
 function App() {
   const [nodes, setNodes] = useState(initialNodes);
+
+  // Safe setNodes wrapper to catch any errors
+  const safeSetNodes = useCallback((newNodes) => {
+    try {
+      if (Array.isArray(newNodes)) {
+        setNodes(newNodes);
+      } else {
+        console.error('setNodes called with non-array:', newNodes);
+        setNodes([]);
+      }
+    } catch (error) {
+      console.error('Error in setNodes:', error);
+      setNodes([]);
+    }
+  }, []);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [edges, setEdges] = useState(initialEdges);
 
@@ -196,7 +211,18 @@ function App() {
     // Initialize default templates
     initializeDefaultTemplates();
 
-    axios.get("/workflow/visual-workflows").then((res) => setWorkflows(res.data));
+    axios.get("/workflow/visual-workflows").then((res) => {
+      console.log('Loaded workflows:', res.data);
+      setWorkflows(res.data);
+
+      // Auto-load the first workflow if there's only one
+      if (res.data && res.data.length === 1) {
+        console.log('Auto-loading single workflow:', res.data[0].name);
+        loadWorkflow(res.data[0]);
+      }
+    }).catch(error => {
+      console.error('Error loading workflows:', error);
+    });
   }, []);
 
   // Generate JsonLogic when nodes or edges change
@@ -222,12 +248,12 @@ function App() {
     }
   }, []);
 
-  const onConnectStop = useCallback(() => {
-    setConnectingNodeId(null);
-  }, []);
 
   const onConnectEnd = useCallback(
     (event) => {
+      // Reset connecting node
+      setConnectingNodeId(null);
+
       if (!event.target || !connectingNodeId) return;
 
       const targetIsPane = event.target.classList.contains("react-flow__pane");
@@ -255,7 +281,14 @@ function App() {
           type: "operator",
         };
 
-        setNodes((nds) => nds.concat(newNode));
+        setNodes((nds) => {
+          try {
+            return nds.concat(newNode);
+          } catch (error) {
+            console.error('Error adding connected node:', error);
+            return nds;
+          }
+        });
         setEdges((eds) =>
           eds.concat({
             id: uuidv4(),
@@ -346,7 +379,14 @@ function App() {
           deletable: true,
         };
 
-        setNodes((nds) => [...nds, newNode]);
+        setNodes((nds) => {
+          try {
+            return [...nds, newNode];
+          } catch (error) {
+            console.error('Error adding new node:', error);
+            return nds;
+          }
+        });
 
         // Auto-connect to nearby nodes or selected node
         let connected = false;
@@ -566,24 +606,61 @@ function App() {
   };
 
   const loadWorkflow = (wf) => {
+    console.log('Loading workflow:', wf);
+    console.log('Workflow nodes:', wf.nodes);
+    console.log('Workflow edges:', wf.edges);
     setSelectedWorkflow(wf);
-    // Load visual workflow data
-    setNodes(wf.nodes || []);
-    setEdges(wf.edges || []);
+    // Load visual workflow data with position validation
+    try {
+      const nodes = (wf.nodes || []).map((node, index) => {
+        // Ensure each node has all required React Flow properties
+        const validatedNode = {
+          id: node.id || `node-${index}`,
+          type: node.type || 'default',
+          data: node.data || { label: 'Node' },
+          position: {
+            x: node.position?.x || 300 + (index * 50),
+            y: node.position?.y || 100 + (index * 50)
+          },
+          draggable: node.draggable !== false,
+          selectable: node.selectable !== false,
+          deletable: node.deletable !== false,
+          ...node // Spread other properties
+        };
+
+        // Log warning if position was missing
+        if (!node.position || typeof node.position.x === 'undefined' || typeof node.position.y === 'undefined') {
+          console.warn(`Node ${node.id || index} missing position, added default position:`, validatedNode.position);
+        }
+
+        return validatedNode;
+      });
+      console.log('Validated nodes:', nodes);
+      console.log('Setting nodes in React Flow...');
+      safeSetNodes(nodes);
+      setEdges(wf.edges || []);
+      console.log('Workflow loaded successfully!');
+    } catch (error) {
+      console.error('Error loading workflow nodes:', error);
+      safeSetNodes([]);
+      setEdges([]);
+    }
   };
 
   const deleteWorkflow = (id) => {
     axios
-      .delete(`/api/workflows/${id}`)
+      .post(`/workflow/visual-workflows/${id}/delete`)
       .then(() => {
         setWorkflows((list) => list.filter((wf) => wf.id !== id));
         if (selectedWorkflow && selectedWorkflow.id === id) {
           setSelectedWorkflow(null);
-          setNodes([]);
+          safeSetNodes([]);
           setEdges([]);
         }
+        alert("Workflow deleted successfully!");
       })
       .catch((err) => {
+        console.error("Delete error:", err);
         alert("Failed to delete workflow. Please try again.");
       });
   };
@@ -760,15 +837,18 @@ function App() {
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               onConnect={onConnect}
-              onNodesChange={(changes) =>
-                setNodes((nds) => applyNodeChanges(changes, nds))
-              }
+              onNodesChange={(changes) => {
+                try {
+                  setNodes((nds) => applyNodeChanges(changes, nds));
+                } catch (error) {
+                  console.error('Error applying node changes:', error);
+                }
+              }}
               onEdgesChange={(changes) =>
                 setEdges((eds) => applyEdgeChanges(changes, eds))
               }
               onInit={setReactFlowInstance}
               onConnectStart={onConnectStart}
-              onConnectStop={onConnectStop}
               onConnectEnd={onConnectEnd}
               fitView
               onNodeClick={(_, node) => setSelectedNodeId(node.id)}

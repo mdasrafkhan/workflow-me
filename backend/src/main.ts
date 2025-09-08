@@ -7,6 +7,14 @@ import { WorkflowRecoveryService } from './services/workflow-recovery.service';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Enable CORS for frontend communication
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+  });
+
   // Get services
   const workflowEngine = app.get(WorkflowOrchestrationEngine);
   const dummyDataService = app.get(DummyDataService);

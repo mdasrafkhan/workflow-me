@@ -29,13 +29,12 @@ async function clearDatabaseAndTest() {
     // 1. Clear ONLY test data (with test- prefix)
     console.log('🗑️  Clearing test data only...');
 
-    // Clear test data in order to respect foreign key constraints
+    // Clear ALL test data (since this is a test environment)
     await emailRepo
       .createQueryBuilder()
       .delete()
-      .where("to LIKE :pattern", { pattern: 'test-%' })
       .execute();
-    console.log('✅ Cleared test email logs');
+    console.log('✅ Cleared all email logs');
 
     await delayRepo
       .createQueryBuilder()
@@ -47,7 +46,7 @@ async function clearDatabaseAndTest() {
     await executionRepo
       .createQueryBuilder()
       .delete()
-      .where("executionId LIKE :pattern", { pattern: 'test-%' })
+      .where("executionId LIKE :pattern OR workflowId LIKE :pattern", { pattern: 'test-%' })
       .execute();
     console.log('✅ Cleared test workflow executions');
 

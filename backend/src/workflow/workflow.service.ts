@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VisualWorkflow } from './visual-workflow.entity';
 import { JsonLogicRule } from './json-logic-rule.entity';
+import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
+import { WorkflowDelay } from '../database/entities/workflow-delay.entity';
 
 @Injectable()
 export class WorkflowService {
@@ -11,6 +13,10 @@ export class WorkflowService {
     private visualWorkflowRepo: Repository<VisualWorkflow>,
     @InjectRepository(JsonLogicRule)
     private jsonLogicRuleRepo: Repository<JsonLogicRule>,
+    @InjectRepository(WorkflowExecution)
+    private executionRepo: Repository<WorkflowExecution>,
+    @InjectRepository(WorkflowDelay)
+    private delayRepo: Repository<WorkflowDelay>,
   ) {}
 
   async findAll(): Promise<VisualWorkflow[]> {
@@ -19,7 +25,7 @@ export class WorkflowService {
     });
   }
 
-  async findOne(id: number): Promise<VisualWorkflow> {
+  async findOne(id: string): Promise<VisualWorkflow> {
     return this.visualWorkflowRepo.findOne({
       where: { id },
       relations: ['jsonLogicRule']
@@ -27,7 +33,7 @@ export class WorkflowService {
   }
 
   async createOrUpdate(data: {
-    id?: number;
+    id?: string;
     name: string;
     nodes: any;
     edges: any;
@@ -79,12 +85,69 @@ export class WorkflowService {
     return this.visualWorkflowRepo.save(visualWorkflow);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
+    // First check if the workflow exists
+    const workflow = await this.visualWorkflowRepo.findOne({
+      where: { id },
+      relations: ['jsonLogicRule']
+    });
+
+    if (!workflow) {
+      throw new Error(`Workflow with id ${id} not found`);
+    }
+
+    // Get the workflow UUID for identification
+    const workflowUuid = workflow.id;
+    const workflowName = workflow.name;
+    const jsonLogicRuleId = workflow.jsonLogicRule?.id;
+
+    console.log(`🗑️  Deleting workflow: ${workflowName} (UUID: ${workflowUuid})`);
+
+    // Step 1: Find all workflow executions for this workflow
+    const executions = await this.executionRepo.find({
+      where: { workflowId: workflowUuid }
+    });
+
+    console.log(`📊 Found ${executions.length} workflow executions to delete`);
+
+    if (executions.length > 0) {
+      // Get all execution IDs
+      const executionIds = executions.map(exec => exec.executionId);
+
+      // Step 2: Delete all related workflow delays
+      const delayDeleteResult = await this.delayRepo
+        .createQueryBuilder()
+        .delete()
+        .where("executionId IN (:...executionIds)", { executionIds })
+        .execute();
+
+      console.log(`⏰ Deleted ${delayDeleteResult.affected} workflow delays`);
+
+      // Step 3: Delete all workflow executions
+          const executionDeleteResult = await this.executionRepo
+            .createQueryBuilder()
+            .delete()
+            .where("workflowId = :workflowUuid", { workflowUuid })
+            .execute();
+
+      console.log(`🔄 Deleted ${executionDeleteResult.affected} workflow executions`);
+    }
+
+    // Step 4: Delete the JsonLogic rule if it exists
+    if (jsonLogicRuleId) {
+      await this.jsonLogicRuleRepo.delete(jsonLogicRuleId);
+      console.log(`📋 Deleted JsonLogic rule (ID: ${jsonLogicRuleId})`);
+    }
+
+    // Step 5: Finally delete the visual workflow
     await this.visualWorkflowRepo.delete(id);
+    console.log(`✅ Deleted visual workflow: ${workflowName}`);
+
+    console.log(`🎉 Workflow deletion completed successfully!`);
   }
 
   // Get workflows with JsonLogic rules for execution
-  async findAllWithJsonLogic(): Promise<Array<{ id: number; name: string; jsonLogic: any }>> {
+  async findAllWithJsonLogic(): Promise<Array<{ id: string; name: string; jsonLogic: any }>> {
     const workflows = await this.visualWorkflowRepo.find({
       relations: ['jsonLogicRule']
     });

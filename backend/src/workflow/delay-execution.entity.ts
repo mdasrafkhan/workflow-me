@@ -7,7 +7,7 @@ export class DelayExecution {
   id: string;
 
   @Column()
-  workflowId: number;
+  workflowId: string;
 
   @Column()
   executionId: string;
