@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index, Unique } from 'typeorm';
 
 @Entity('workflow_executions')
 @Index(['status', 'createdAt']) // For efficient querying
 @Index(['triggerType', 'triggerId']) // For trigger-based queries
+@Unique(['workflowId', 'userId', 'triggerType', 'triggerId']) // Prevent duplicate executions
 export class WorkflowExecution {
   @PrimaryGeneratedColumn('uuid')
   id: string;

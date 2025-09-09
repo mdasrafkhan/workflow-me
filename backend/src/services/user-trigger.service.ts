@@ -48,9 +48,9 @@ export class UserTriggerService {
 
     this.logger.log(`Found ${users.length} new users to process for workflow ${workflowId} since last run`);
 
-    // Update last execution time to now (only after successful query)
-    executionSchedule.lastExecutionTime = new Date();
-    await this.executionScheduleRepository.save(executionSchedule);
+    // ⚠️ CRITICAL FIX: Only update lastExecutionTime AFTER successful processing
+    // This prevents data loss if server crashes during processing
+    // The time update will be handled by the caller after successful processing
 
     return users.map(user => ({
       id: user.id,
@@ -77,6 +77,18 @@ export class UserTriggerService {
       },
       createdAt: user.createdAt
     }));
+  }
+
+  /**
+   * Update last execution time after successful processing
+   * This should be called by the caller after all users are processed successfully
+   */
+  async updateLastExecutionTime(workflowId: string, triggerType: string = 'user_created'): Promise<void> {
+    await this.executionScheduleRepository.update(
+      { workflowId, triggerType },
+      { lastExecutionTime: new Date() }
+    );
+    this.logger.log(`Updated last execution time for workflow ${workflowId}`);
   }
 
   getLastProcessedTime(): Date | null {

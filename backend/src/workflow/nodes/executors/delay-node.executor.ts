@@ -130,7 +130,11 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
     let delayHours = 0;
     let delayType = 'fixed';
 
-    if (delayData.type === 'fixed') {
+    // CRITICAL FIX: Use pre-calculated delayMs if available (from workflow conversion)
+    if (delayData.delayMs && delayData.delayMs > 0) {
+      delayHours = delayData.delayMs / (60 * 60 * 1000); // Convert milliseconds to hours
+      delayType = 'fixed';
+    } else if (delayData.type === 'fixed') {
       delayHours = delayData.hours || 0;
       delayType = 'fixed';
     } else if (delayData.type === 'random') {
@@ -141,11 +145,11 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
     } else {
       // Handle frontend delay type mappings
       const delayMap = {
-        '1_minute': 1/60,
-        '2_minutes': 2/60,
-        '5_minutes': 5/60,
-        '10_minutes': 10/60,
-        '30_minutes': 30/60,
+        '1_minute': 1/60,      // 1 minute = 1/60 hours
+        '2_minutes': 2/60,     // 2 minutes = 2/60 hours = 1/30 hours
+        '5_minutes': 5/60,     // 5 minutes = 5/60 hours = 1/12 hours
+        '10_minutes': 10/60,   // 10 minutes = 10/60 hours = 1/6 hours
+        '30_minutes': 30/60,   // 30 minutes = 30/60 hours = 0.5 hours
         '1_hour': 1,
         '1_day': 24,
         '2_days': 48,
@@ -158,9 +162,6 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
 
       delayHours = delayMap[delayData.type] || delayData.hours || 24;
       delayType = 'fixed';
-
-      // Debug logging
-      console.log(`🔧 Delay Executor Debug: type=${delayData.type}, delayHours=${delayHours}, delayMap[type]=${delayMap[delayData.type]}`);
     }
 
     return { delayHours, delayType };

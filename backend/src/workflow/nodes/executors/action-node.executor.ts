@@ -38,7 +38,8 @@ export class ActionNodeExecutor extends BaseNodeExecutor {
       const actionData = step.data;
       const actionType = actionData.actionType || 'send_email';
       const actionName = actionData.actionName || 'Action';
-      const actionDetails = actionData.actionData || {};
+      // For email actions, the configuration is directly in actionData, not in actionData.actionData
+      const actionDetails = actionData.actionData || actionData;
 
       // Create user data object from context
       const userData = {

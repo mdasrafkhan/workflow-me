@@ -123,12 +123,16 @@ export class WorkflowOrchestrationEngine {
     workflow: WorkflowDefinition,
     context: WorkflowExecutionContext
   ): Promise<WorkflowExecutionResult> {
+    this.logger.log(`🚀 Starting workflow execution: ${workflow.name} (${workflow.id})`);
+    this.logger.log(`📋 Workflow has ${workflow.steps?.length || 0} steps`);
+    this.logger.log(`👤 User ID: ${context.userId}`);
+    this.logger.log(`🔧 Context data:`, JSON.stringify(context.data, null, 2));
     const executionId = this.generateExecutionId();
     this.logger.log(`Starting workflow execution: ${executionId} for workflow: ${workflow.id}`);
 
     try {
       // Create execution record
-      const execution = await this.createExecutionRecord(executionId, context.workflowId, context);
+      const execution = await this.createExecutionRecord(executionId, workflow.id, context);
 
       // Execute workflow steps using node registry
       const result = await this.executeWorkflowSteps(workflow, context, execution);
@@ -223,6 +227,19 @@ export class WorkflowOrchestrationEngine {
         completedSteps.push(step.id);
         this.logger.debug(`Step completed successfully: ${step.id}`);
 
+        // Save execution state to database after each step
+        const executionState = (execution as any).state;
+        if (executionState && executionState.history) {
+          executionState.history.push({
+            stepId: step.id,
+            state: 'completed',
+            timestamp: new Date(),
+            result: stepResult.result
+          });
+          await this.executionRepository.save(execution);
+          this.logger.debug(`Saved execution state after step ${step.id}`);
+        }
+
         // Determine next step (orchestration logic only)
         currentStepIndex = this.determineNextStepIndex(steps, step, stepResult, currentStepIndex);
 
@@ -302,16 +319,207 @@ export class WorkflowOrchestrationEngine {
     }
 
     // Continue from where we left off
-    await this.continueWorkflowExecution(execution);
+    await this.continueWorkflowExecution(execution, delay);
   }
 
   /**
    * Continue workflow execution - orchestration only
    */
-  private async continueWorkflowExecution(execution: WorkflowExecution): Promise<void> {
-    // This would continue from the last completed step
-    // Implementation depends on your state management strategy
+  private async continueWorkflowExecution(execution: WorkflowExecution, delay?: WorkflowDelay): Promise<void> {
     this.logger.log(`Continuing workflow execution: ${execution.id}`);
+
+    // Get the workflow definition
+    const workflow = await this.getWorkflowById(execution.workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow not found: ${execution.workflowId}`);
+    }
+
+    // Get the current execution state
+    const executionState = (execution as any).state;
+    if (!executionState) {
+      throw new Error(`Execution state not found for: ${execution.id}`);
+    }
+
+    // Ensure context data is properly initialized
+    if (!executionState.context) {
+      executionState.context = {};
+    }
+    if (!executionState.context.data) {
+      executionState.context.data = {};
+    }
+
+    // Restore context data from delay record if available
+    if (delay.context) {
+      executionState.context = {
+        ...executionState.context,
+        ...delay.context
+      };
+      // Also restore the data property specifically
+      if (delay.context.data) {
+        executionState.context.data = {
+          ...executionState.context.data,
+          ...delay.context.data
+        };
+      }
+      this.logger.log(`Restored context from delay record: ${JSON.stringify(delay.context, null, 2)}`);
+    }
+
+    // Ensure triggerId is set from the original execution
+    if (!executionState.context.triggerId && execution.triggerId) {
+      executionState.context.triggerId = execution.triggerId;
+    }
+    if (!executionState.context.triggerType && execution.triggerType) {
+      executionState.context.triggerType = execution.triggerType;
+    }
+    if (!executionState.context.userId && execution.userId) {
+      executionState.context.userId = execution.userId;
+    }
+
+    // If context data is empty, try to restore it from the delay context
+    if (!executionState.context.data || Object.keys(executionState.context.data).length === 0) {
+      this.logger.log(`Context data is empty, attempting to restore from delay context`);
+
+      if (delay.context) {
+        // The delay context contains user data directly, so we need to put it in the data property
+        const userData = {
+          userId: delay.context.userId,
+          email: delay.context.email,
+          name: delay.context.name,
+          user: delay.context.user,
+          preferences: delay.context.preferences,
+          isActive: delay.context.isActive,
+          timezone: delay.context.timezone,
+          phoneNumber: delay.context.phoneNumber
+        };
+
+        executionState.context.data = {
+          ...executionState.context.data,
+          ...userData
+        };
+        this.logger.log(`Restored context data from delay: ${JSON.stringify(executionState.context.data, null, 2)}`);
+      }
+    }
+
+    // Find the last completed step (exclude 'final' and 'error' steps)
+    const history = executionState.history || [];
+    const lastCompletedStep = history.findLast((step: any) =>
+      step.state === 'completed' &&
+      step.stepId !== 'final' &&
+      step.stepId !== 'error'
+    );
+
+    if (!lastCompletedStep) {
+      this.logger.warn(`No completed steps found in execution ${execution.id}, starting from beginning`);
+      // If no completed steps, start from the beginning but continue the existing execution
+      const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
+      await this.updateExecutionStatus(execution, result);
+      return;
+    }
+
+    this.logger.log(`Last completed step: ${lastCompletedStep.stepId}, continuing from next step`);
+
+    // Use the workflow definition directly (it's already converted from JsonLogic)
+    const workflowDefinition = workflow;
+
+    // Find the index of the last completed step
+    const lastStepIndex = workflowDefinition.steps.findIndex(step => step.id === lastCompletedStep.stepId);
+
+    if (lastStepIndex === -1) {
+      this.logger.warn(`Last completed step ${lastCompletedStep.stepId} not found in workflow definition, starting from beginning`);
+      // Start from the beginning but continue the existing execution
+      const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
+      await this.updateExecutionStatus(execution, result);
+      return;
+    }
+
+    // Continue from the next step
+    const remainingSteps = workflowDefinition.steps.slice(lastStepIndex + 1);
+
+    if (remainingSteps.length === 0) {
+      this.logger.log(`All steps completed for execution ${execution.id}`);
+      execution.status = 'completed';
+      await this.executionRepository.save(execution);
+      return;
+    }
+
+    this.logger.log(`Continuing with ${remainingSteps.length} remaining steps`);
+
+    // Execute remaining steps
+    for (const step of remainingSteps) {
+      try {
+        this.logger.log(`Executing step: ${step.id} (${step.type})`);
+
+        const result = await this.executeStep(step, executionState.context, execution);
+
+        if (!result.success) {
+          this.logger.error(`Step ${step.id} failed: ${result.error}`);
+          execution.status = 'failed';
+          await this.executionRepository.save(execution);
+          return;
+        }
+
+        // Update context with step result
+        if (result.result) {
+          executionState.context.data = {
+            ...executionState.context.data,
+            ...result.result
+          };
+        }
+
+      } catch (error) {
+        this.logger.error(`Error executing step ${step.id}: ${error.message}`);
+        execution.status = 'failed';
+        await this.executionRepository.save(execution);
+        return;
+      }
+    }
+
+    // Mark execution as completed
+    execution.status = 'completed';
+    await this.executionRepository.save(execution);
+    this.logger.log(`Workflow execution ${execution.id} completed successfully`);
+  }
+
+  /**
+   * Execute a single workflow step
+   */
+  private async executeStep(step: any, context: WorkflowExecutionContext, execution: WorkflowExecution): Promise<ExecutionResult> {
+    try {
+      this.logger.log(`Executing step: ${step.id} (${step.type})`);
+
+      // Get the appropriate node executor
+      const executor = this.nodeRegistry.getExecutor(step.type);
+      if (!executor) {
+        throw new Error(`No executor found for step type: ${step.type}`);
+      }
+
+      // Execute the step
+      const result = await executor.execute(step, context, execution);
+
+      // Update execution history
+      const executionState = (execution as any).state;
+      if (executionState && executionState.history) {
+        executionState.history.push({
+          stepId: step.id,
+          state: result.success ? 'completed' : 'failed',
+          timestamp: new Date(),
+          result: result.result
+        });
+
+        // Save execution state to database after each step
+        await this.executionRepository.save(execution);
+        this.logger.debug(`Saved execution state after step ${step.id}`);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Error executing step ${step.id}: ${error.message}`);
+      return {
+        success: false,
+        error: error.message,
+        result: null
+      };
+    }
   }
 
   // ============================================================================
@@ -426,15 +634,16 @@ export class WorkflowOrchestrationEngine {
           // Add required delay fields for validation
           action.type = action.delay.type || '1_day';
           action.delayMs = this.convertDelayTypeToMs(action.delay.type);
-        } else if (action.send_email) {
+        } else if (action.send_email || action['Send Mail'] || action['send_mail']) {
           stepType = 'action';
           actionType = 'send_email';
           actionName = 'send_email_step';
           // Add required email fields for validation
-          if (action.send_email.data) {
-            action.templateId = action.send_email.data.templateId;
-            action.subject = action.send_email.data.subject;
-            action.to = 'user@example.com'; // Default recipient
+          const emailData = action.send_email || action['Send Mail'] || action['send_mail'];
+          if (emailData) {
+            action.templateId = emailData.data?.templateId || 'welcome_email';
+            action.subject = emailData.data?.subject || 'Welcome to our service!';
+            action.to = emailData.data?.to || 'user@example.com';
           }
         } else if (action.send_sms) {
           stepType = 'action';
@@ -514,15 +723,16 @@ export class WorkflowOrchestrationEngine {
             // Add required delay fields for validation
             action.type = action.delay.type || '1_day';
             action.delayMs = this.convertDelayTypeToMs(action.delay.type);
-          } else if (action.send_email) {
+          } else if (action.send_email || action['Send Mail'] || action['send_mail']) {
             stepType = 'action';
             actionType = 'send_email';
             actionName = 'send_email_step';
             // Add required email fields for validation
-            if (action.send_email.data) {
-              action.templateId = action.send_email.data.templateId;
-              action.subject = action.send_email.data.subject;
-              action.to = 'user@example.com'; // Default recipient
+            const emailData = action.send_email || action['Send Mail'] || action['send_mail'];
+            if (emailData) {
+              action.templateId = emailData.data?.templateId || 'welcome_email';
+              action.subject = emailData.data?.subject || 'Welcome to our service!';
+              action.to = emailData.data?.to || 'user@example.com';
             }
           } else if (action.send_sms) {
             stepType = 'action';

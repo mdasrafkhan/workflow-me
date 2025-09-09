@@ -7,41 +7,6 @@ import { WorkflowExecutionContext } from './types';
 import { SubscriptionTriggerService } from '../services/subscription-trigger.service';
 import { NewsletterTriggerService } from '../services/newsletter-trigger.service';
 import { UserTriggerService } from '../services/user-trigger.service';
-const jsonLogic = require('json-logic-js');
-
-// Mock subscriber data
-const mockSubscribers = [
-  {
-    id: 1,
-    email: 'user1@example.com',
-    payment: 'paid',
-    created_at: new Date('2023-01-01'),
-    subscription_package: 'premium',
-    subscription_status: 'active',
-    newsletter_subscribed: true,
-    user_segment: 'new_user'
-  },
-  {
-    id: 2,
-    email: 'user2@example.com',
-    payment: 'unpaid',
-    created_at: new Date('2024-07-01'),
-    subscription_package: 'basic',
-    subscription_status: 'inactive',
-    newsletter_subscribed: false,
-    user_segment: 'returning_user'
-  },
-  {
-    id: 3,
-    email: 'user3@example.com',
-    payment: 'paid',
-    created_at: new Date('2024-08-01'),
-    subscription_package: 'enterprise',
-    subscription_status: 'active',
-    newsletter_subscribed: true,
-    user_segment: 'premium_user'
-  },
-];
 
 @Injectable()
 export class WorkflowCron {
@@ -53,6 +18,11 @@ export class WorkflowCron {
     errorCount: number;
     executionTime: number;
   }> = [];
+
+  // Cache for active trigger types to avoid checking on every cron run
+  private activeTriggerTypesCache: string[] = [];
+  private lastTriggerTypesCheck: Date | null = null;
+  private readonly TRIGGER_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   constructor(
     private readonly workflowService: WorkflowService,
@@ -71,76 +41,111 @@ export class WorkflowCron {
     let errorCount = 0;
 
     try {
-      // Process subscription triggers
-      console.log('Processing subscription triggers...');
-      const subscriptionTriggers = await this.subscriptionTriggerService.retrieveTriggerData(this.lastExecutionTime);
-      console.log(`Found ${subscriptionTriggers.length} subscription triggers`);
+      // ⚠️ CRITICAL FIX: First check which trigger types have active workflows
+      const activeTriggerTypes = await this.getActiveTriggerTypes();
+      console.log(`Active trigger types: ${activeTriggerTypes.join(', ')}`);
 
-      for (const trigger of subscriptionTriggers) {
-        try {
-          await this.processTriggerEvent(trigger, 'user_buys_subscription');
-          successCount++;
-        } catch (error) {
-          console.error(`Error processing subscription trigger ${trigger.id}:`, error);
-          errorCount++;
-        }
+      if (activeTriggerTypes.length === 0) {
+        console.log('No active workflows found, skipping trigger processing');
+        return;
       }
 
-      // Process newsletter triggers
-      console.log('Processing newsletter triggers...');
-      const newsletterTriggers = await this.newsletterTriggerService.retrieveTriggerData(this.lastExecutionTime);
-      console.log(`Found ${newsletterTriggers.length} newsletter triggers`);
+      // Process subscription triggers only if workflows exist for this trigger type
+      if (activeTriggerTypes.includes('user_buys_subscription')) {
+        console.log('Processing subscription triggers...');
+        const subscriptionTriggers = await this.subscriptionTriggerService.retrieveTriggerData(this.lastExecutionTime);
+        console.log(`Found ${subscriptionTriggers.length} subscription triggers`);
 
-      for (const trigger of newsletterTriggers) {
-        try {
-          await this.processTriggerEvent(trigger, 'newsletter_subscribed');
-          successCount++;
-        } catch (error) {
-          console.error(`Error processing newsletter trigger ${trigger.id}:`, error);
-          errorCount++;
-        }
-      }
-
-      // Process user registration triggers (newsletter subscriptions can trigger user_registers)
-      console.log('Processing user registration triggers...');
-      for (const trigger of newsletterTriggers) {
-        try {
-          await this.processTriggerEvent(trigger, 'user_registers');
-          successCount++;
-        } catch (error) {
-          console.error(`Error processing user registration trigger ${trigger.id}:`, error);
-          errorCount++;
-        }
-      }
-
-      // Process user creation triggers for each workflow
-      console.log('Processing user creation triggers...');
-      try {
-        // Get all workflows that have user_created triggers
-        const workflows = await this.workflowService.findAll();
-
-        for (const workflow of workflows) {
+        for (const trigger of subscriptionTriggers) {
           try {
-            const userTriggers = await this.userTriggerService.retrieveTriggerData(workflow.id);
-            console.log(`Found ${userTriggers.length} user creation triggers for workflow ${workflow.id}`);
-
-            for (const trigger of userTriggers) {
-              try {
-                await this.processTriggerEvent(trigger, 'user_created');
-                successCount++;
-              } catch (error) {
-                console.error(`Error processing user creation trigger ${trigger.id}:`, error);
-                errorCount++;
-              }
-            }
+            await this.processTriggerEvent(trigger, 'user_buys_subscription');
+            successCount++;
           } catch (error) {
-            console.error(`Error processing user creation triggers for workflow ${workflow.id}:`, error);
+            console.error(`Error processing subscription trigger ${trigger.id}:`, error);
             errorCount++;
           }
         }
-      } catch (error) {
-        console.error('Error in user creation triggers section:', error);
-        errorCount++;
+      } else {
+        console.log('Skipping subscription triggers - no active workflows found');
+      }
+
+      // Process newsletter triggers only if workflows exist for this trigger type
+      if (activeTriggerTypes.includes('newsletter_subscribed')) {
+        console.log('Processing newsletter triggers...');
+        const newsletterTriggers = await this.newsletterTriggerService.retrieveTriggerData(this.lastExecutionTime);
+        console.log(`Found ${newsletterTriggers.length} newsletter triggers`);
+
+        for (const trigger of newsletterTriggers) {
+          try {
+            await this.processTriggerEvent(trigger, 'newsletter_subscribed');
+            successCount++;
+          } catch (error) {
+            console.error(`Error processing newsletter trigger ${trigger.id}:`, error);
+            errorCount++;
+          }
+        }
+      } else {
+        console.log('Skipping newsletter triggers - no active workflows found');
+      }
+
+      // Process user registration triggers only if workflows exist for this trigger type
+      if (activeTriggerTypes.includes('user_registers')) {
+        console.log('Processing user registration triggers...');
+        const newsletterTriggers = await this.newsletterTriggerService.retrieveTriggerData(this.lastExecutionTime);
+
+        for (const trigger of newsletterTriggers) {
+          try {
+            await this.processTriggerEvent(trigger, 'user_registers');
+            successCount++;
+          } catch (error) {
+            console.error(`Error processing user registration trigger ${trigger.id}:`, error);
+            errorCount++;
+          }
+        }
+      } else {
+        console.log('Skipping user registration triggers - no active workflows found');
+      }
+
+      // Process user creation triggers for each workflow
+      if (activeTriggerTypes.includes('user_created')) {
+        console.log('Processing user creation triggers...');
+        try {
+          // Get all workflows that have user_created triggers
+          const workflows = await this.workflowService.findAll();
+
+          for (const workflow of workflows) {
+            try {
+              const userTriggers = await this.userTriggerService.retrieveTriggerData(workflow.id);
+              console.log(`Found ${userTriggers.length} user creation triggers for workflow ${workflow.id}`);
+
+              let processedCount = 0;
+              for (const trigger of userTriggers) {
+                try {
+                  await this.processTriggerEvent(trigger, 'user_created');
+                  processedCount++;
+                  successCount++;
+                } catch (error) {
+                  console.error(`Error processing user creation trigger ${trigger.id}:`, error);
+                  errorCount++;
+                }
+              }
+
+              // ⚠️ CRITICAL FIX: Only update lastExecutionTime after successful processing
+              if (processedCount > 0) {
+                await this.userTriggerService.updateLastExecutionTime(workflow.id, 'user_created');
+                console.log(`Updated last execution time for workflow ${workflow.id} after processing ${processedCount} triggers`);
+              }
+            } catch (error) {
+              console.error(`Error processing user creation triggers for workflow ${workflow.id}:`, error);
+              errorCount++;
+            }
+          }
+        } catch (error) {
+          console.error('Error in user creation triggers section:', error);
+          errorCount++;
+        }
+      } else {
+        console.log('Skipping user creation triggers - no active workflows found');
       }
 
     } catch (error) {
@@ -171,6 +176,59 @@ export class WorkflowCron {
   }
 
   /**
+   * Get active trigger types by checking which workflows exist for each trigger type
+   * This prevents processing triggers when no workflows are configured for them
+   * Uses caching to avoid checking on every cron run
+   */
+  private async getActiveTriggerTypes(): Promise<string[]> {
+    // Check if cache is still valid
+    const now = new Date();
+    if (this.lastTriggerTypesCheck &&
+        (now.getTime() - this.lastTriggerTypesCheck.getTime()) < this.TRIGGER_TYPES_CACHE_TTL) {
+      return this.activeTriggerTypesCache;
+    }
+
+    try {
+      const workflows = await this.workflowService.findAllWithJsonLogic();
+      const activeTriggerTypes = new Set<string>();
+
+      for (const workflow of workflows) {
+        const rule = workflow.jsonLogic;
+        if (!rule) continue;
+
+        // Check for parallel trigger structure
+        if (rule.parallel && rule.parallel.trigger && rule.parallel.trigger.trigger) {
+          activeTriggerTypes.add(rule.parallel.trigger.trigger.event);
+        }
+
+        // Check for 'and' trigger structure (new format)
+        if (rule.and && Array.isArray(rule.and)) {
+          for (const condition of rule.and) {
+            if (condition && condition.trigger && condition.trigger.event) {
+              activeTriggerTypes.add(condition.trigger.event);
+            }
+          }
+        }
+
+        // Check for direct trigger structure
+        if (rule.trigger && rule.trigger.event) {
+          activeTriggerTypes.add(rule.trigger.event);
+        }
+      }
+
+      // Update cache
+      this.activeTriggerTypesCache = Array.from(activeTriggerTypes);
+      this.lastTriggerTypesCheck = now;
+
+      console.log(`Updated active trigger types cache: ${this.activeTriggerTypesCache.join(', ')}`);
+      return this.activeTriggerTypesCache;
+    } catch (error) {
+      console.error('Error getting active trigger types:', error);
+      return this.activeTriggerTypesCache; // Return cached value on error
+    }
+  }
+
+  /**
    * Check if a user has a recent execution for a workflow (within last 24 hours)
    */
   private async hasRecentExecution(workflowId: string, userId: string): Promise<boolean> {
@@ -190,34 +248,51 @@ export class WorkflowCron {
   }
 
   /**
+   * Get workflows that match a specific trigger type
+   * This is more efficient than loading all workflows and filtering
+   */
+  private async getWorkflowsForTriggerType(eventType: string): Promise<Array<{ id: string; name: string; jsonLogic: any }>> {
+    try {
+      const workflows = await this.workflowService.findAllWithJsonLogic();
+      return workflows.filter(wf => {
+        const rule = wf.jsonLogic;
+        if (!rule) return false;
+
+        // Check for parallel trigger structure
+        if (rule.parallel && rule.parallel.trigger && rule.parallel.trigger.trigger) {
+          return rule.parallel.trigger.trigger.event === eventType;
+        }
+
+        // Check for 'and' trigger structure (new format)
+        if (rule.and && Array.isArray(rule.and)) {
+          for (const condition of rule.and) {
+            if (condition && condition.trigger && condition.trigger.event === eventType) {
+              return true;
+            }
+          }
+        }
+
+        // Check for direct trigger structure
+        if (rule.trigger && rule.trigger.event === eventType) {
+          return true;
+        }
+
+        return false;
+      });
+    } catch (error) {
+      console.error(`Error getting workflows for trigger type ${eventType}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Process a trigger event by finding matching workflows and executing them
    */
   private async processTriggerEvent(trigger: any, eventType: string): Promise<void> {
     console.log(`Processing ${eventType} trigger for user ${trigger.userId}`);
 
-    // Get all workflows that match this trigger event
-    const workflows = await this.workflowService.findAllWithJsonLogic();
-    const matchingWorkflows = workflows.filter(wf => {
-      // Check if workflow has the matching trigger event
-      const rule = wf.jsonLogic;
-
-      // Check for parallel trigger structure
-      if (rule && rule.parallel && rule.parallel.trigger && rule.parallel.trigger.trigger) {
-        return rule.parallel.trigger.trigger.event === eventType;
-      }
-
-      // Check for 'and' trigger structure (new format)
-      if (rule && rule.and && Array.isArray(rule.and)) {
-        for (const condition of rule.and) {
-          if (condition && condition.trigger && condition.trigger.event === eventType) {
-            return true;
-          }
-        }
-      }
-
-      return false;
-    });
-
+    // ⚠️ OPTIMIZATION: Only get workflows that match this specific trigger event
+    const matchingWorkflows = await this.getWorkflowsForTriggerType(eventType);
     console.log(`Found ${matchingWorkflows.length} workflows matching ${eventType} trigger`);
 
     for (const workflow of matchingWorkflows) {
@@ -250,9 +325,11 @@ export class WorkflowCron {
         };
 
         // Convert JsonLogic rule to WorkflowDefinition format
+        console.log(`Original JsonLogic rule for workflow ${workflow.id}:`, JSON.stringify(workflow.jsonLogic, null, 2));
         const workflowDefinition = this.convertJsonLogicToWorkflowDefinition(workflow.jsonLogic, workflow.id, workflow.id, workflow.name);
 
         console.log(`Executing workflow ${workflow.name} for user ${trigger.userId}`);
+        console.log(`Workflow definition:`, JSON.stringify(workflowDefinition, null, 2));
         const result = await this.workflowOrchestrationEngine.executeWorkflow(workflowDefinition, context);
 
         if (result.success) {
@@ -351,63 +428,6 @@ export class WorkflowCron {
     };
   }
 
-  /**
-   * Execute workflow using the orchestration engine
-   */
-  private async executeWorkflowWithOrchestrationEngine(jsonLogicRule: any, workflowId: string, workflowUuid: string, workflowName: string) {
-    console.log(`Workflow ${workflowName} (UUID: ${workflowUuid}, ID: ${workflowId}): Executing with orchestration engine`);
-    console.log(`JsonLogic Rule:`, JSON.stringify(jsonLogicRule, null, 2));
-
-    // Process each subscriber with the orchestration engine
-    for (const subscriber of mockSubscribers) {
-      try {
-        // Check if this user has already been processed for this workflow recently (within last 24 hours)
-        const hasRecentExecution = await this.hasRecentExecution(workflowUuid, subscriber.id.toString());
-
-        if (hasRecentExecution) {
-          console.log(`Workflow ${workflowId}: Subscriber ${subscriber.id} - Skipping duplicate execution (recent execution found)`);
-          continue;
-        }
-
-        const executionId = `cron-${workflowId}-${subscriber.id}-${Date.now()}`;
-        const context: WorkflowExecutionContext = {
-          executionId,
-          workflowId: workflowUuid, // Use workflow UUID instead of name
-          triggerType: 'cron',
-          triggerId: `cron-${workflowId}`,
-          userId: subscriber.id.toString(),
-          triggerData: {
-            source: 'cron',
-            timestamp: new Date(),
-            workflowId
-          },
-          data: subscriber,
-          metadata: {
-            source: 'cron',
-            timestamp: new Date(),
-            userId: subscriber.id.toString(),
-            workflowId
-          },
-          createdAt: new Date()
-        };
-
-        // Convert JsonLogic rule to WorkflowDefinition format
-        const workflowDefinition = this.convertJsonLogicToWorkflowDefinition(jsonLogicRule, workflowId, workflowUuid, workflowName);
-
-        console.log(`Workflow ${workflowId}: Generated workflow definition:`, JSON.stringify(workflowDefinition, null, 2));
-
-        const result = await this.workflowOrchestrationEngine.executeWorkflow(workflowDefinition, context);
-
-        console.log(`Workflow ${workflowId}: Subscriber ${subscriber.id} - Execution result:`, result);
-
-        if (result.success) {
-          console.log(`Workflow ${workflowId}: Subscriber ${subscriber.id} - Action executed successfully`);
-        }
-      } catch (error) {
-        console.error(`Workflow ${workflowId}: Orchestration execution error for subscriber ${subscriber.id}:`, error);
-      }
-    }
-  }
 
   /**
    * Convert JsonLogic rule to WorkflowDefinition format
@@ -469,15 +489,16 @@ export class WorkflowCron {
           // Add required delay fields for validation
           action.type = action.delay.type || '1_day';
           action.delayMs = this.convertDelayTypeToMs(action.delay.type);
-        } else if (action.send_email) {
+        } else if (action.send_email || action['Send Mail'] || action['send_mail']) {
           stepType = 'action';
           actionType = 'send_email';
           actionName = 'send_email_step';
           // Add required email fields for validation
-          if (action.send_email.data) {
-            action.templateId = action.send_email.data.templateId;
-            action.subject = action.send_email.data.subject;
-            action.to = 'user@example.com'; // Default recipient
+          const emailData = action.send_email || action['Send Mail'] || action['send_mail'];
+          if (emailData) {
+            action.templateId = emailData.data?.templateId || 'welcome_email';
+            action.subject = emailData.data?.subject || 'Welcome to our service!';
+            action.to = emailData.data?.to || 'user@example.com';
           }
         } else if (action.send_sms) {
           stepType = 'action';
@@ -557,15 +578,16 @@ export class WorkflowCron {
             // Add required delay fields for validation
             action.type = action.delay.type || '1_day';
             action.delayMs = this.convertDelayTypeToMs(action.delay.type);
-          } else if (action.send_email) {
+          } else if (action.send_email || action['Send Mail'] || action['send_mail']) {
             stepType = 'action';
             actionType = 'send_email';
             actionName = 'send_email_step';
             // Add required email fields for validation
-            if (action.send_email.data) {
-              action.templateId = action.send_email.data.templateId;
-              action.subject = action.send_email.data.subject;
-              action.to = 'user@example.com'; // Default recipient
+            const emailData = action.send_email || action['Send Mail'] || action['send_mail'];
+            if (emailData && emailData.data) {
+              action.templateId = emailData.data.templateId;
+              action.subject = emailData.data.subject;
+              action.to = emailData.data.to || 'user@example.com';
             }
           } else if (action.send_sms) {
             stepType = 'action';
@@ -642,47 +664,6 @@ export class WorkflowCron {
     };
   }
 
-  /**
-   * Execute workflow using JsonLogic (legacy method - kept for backward compatibility)
-   */
-  private async executeWorkflowWithJsonLogic(jsonLogicRule: any, workflowId: string) {
-    console.log(`Workflow ${workflowId}: Executing with JsonLogic`);
-    console.log(`JsonLogic Rule:`, JSON.stringify(jsonLogicRule, null, 2));
-
-    // Process each subscriber with the JsonLogic rule
-    for (const subscriber of mockSubscribers) {
-      try {
-        const result = jsonLogic.apply(jsonLogicRule, subscriber);
-        console.log(`Workflow ${workflowId}: Subscriber ${subscriber.id} - Rule result: ${result}`);
-
-        if (result === true || (typeof result === 'object' && result.execute === true)) {
-          // Execute the action
-          const action = result.action || 'default_action';
-          await this.executeAction(action, subscriber, workflowId);
-        }
-      } catch (error) {
-        console.error(`Workflow ${workflowId}: JsonLogic execution error for subscriber ${subscriber.id}:`, error);
-      }
-    }
-  }
-
-  /**
-   * Execute action based on JsonLogic result
-   */
-  private async executeAction(action: string, subscriber: any, workflowId: string) {
-    switch (action) {
-      case 'delete':
-        console.log(`Workflow ${workflowId}: ACTION - Deleting subscriber ${subscriber.id} (${subscriber.email}).`);
-        // In a real app, this would call a service to delete the subscriber from the DB.
-        break;
-      case 'send_mail':
-        console.log(`Workflow ${workflowId}: ACTION - Sending email to ${subscriber.email} for subscriber ${subscriber.id}.`);
-        // In a real app, this would call an email service.
-        break;
-      default:
-        console.log(`Workflow ${workflowId}: ACTION - Executing default action for subscriber ${subscriber.id}.`);
-    }
-  }
 
 
 }

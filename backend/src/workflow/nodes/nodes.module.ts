@@ -9,6 +9,7 @@ import { DelayNodeExecutor } from './executors/delay-node.executor';
 import { ActionNodeExecutor } from './executors/action-node.executor';
 import { SharedFlowNodeExecutor } from './executors/shared-flow-node.executor';
 import { ConditionNodeExecutor } from './executors/condition-node.executor';
+import { EndNodeExecutor } from './executors/end-node.executor';
 
 // Registry
 import { NodeRegistryService } from './registry/node-registry.service';
@@ -38,6 +39,7 @@ import { WorkflowExecutionEngine } from '../execution/workflow-execution-engine'
     ActionNodeExecutor,
     SharedFlowNodeExecutor,
     ConditionNodeExecutor,
+    EndNodeExecutor,
 
     // Execution Engine
     WorkflowExecutionEngine,
@@ -53,7 +55,8 @@ import { WorkflowExecutionEngine } from '../execution/workflow-execution-engine'
     DelayNodeExecutor,
     ActionNodeExecutor,
     SharedFlowNodeExecutor,
-    ConditionNodeExecutor
+    ConditionNodeExecutor,
+    EndNodeExecutor
   ]
 })
 export class NodesModule {
@@ -62,7 +65,8 @@ export class NodesModule {
     private readonly delayExecutor: DelayNodeExecutor,
     private readonly actionExecutor: ActionNodeExecutor,
     private readonly sharedFlowExecutor: SharedFlowNodeExecutor,
-    private readonly conditionExecutor: ConditionNodeExecutor
+    private readonly conditionExecutor: ConditionNodeExecutor,
+    private readonly endExecutor: EndNodeExecutor
   ) {
     // Auto-register all node executors
     this.registerNodeExecutors();
@@ -73,5 +77,6 @@ export class NodesModule {
     this.nodeRegistry.register(this.actionExecutor);
     this.nodeRegistry.register(this.sharedFlowExecutor);
     this.nodeRegistry.register(this.conditionExecutor);
+    this.nodeRegistry.register(this.endExecutor);
   }
 }

@@ -44,6 +44,11 @@ export class ActionService {
         case 'send_email':
           result = await this.executeSendEmailAction(actionName, actionDetails, userData, metadata, context);
           break;
+        case 'send_mail':
+          // Handle "Send Mail" as an email action
+          this.logger.log(`📧 [ACTION SERVICE] Recognized "Send Mail" action: ${actionName}`);
+          result = await this.executeSendEmailAction(actionName, actionDetails, userData, metadata, context);
+          break;
         case 'update_user':
           result = await this.executeUpdateUserAction(actionName, actionDetails, userData, metadata);
           break;
@@ -102,10 +107,11 @@ export class ActionService {
     metadata: any,
     context?: any
   ): Promise<any> {
-    this.logger.log(`Executing send email action: ${actionName}`);
-    this.logger.debug(`Email details: ${JSON.stringify(actionDetails)}`);
-    this.logger.debug(`User data: ${JSON.stringify(userData)}`);
-    this.logger.debug(`Metadata: ${JSON.stringify(metadata)}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Executing send email action: ${actionName}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Email details: ${JSON.stringify(actionDetails, null, 2)}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] User data: ${JSON.stringify(userData, null, 2)}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Metadata: ${JSON.stringify(metadata, null, 2)}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Context: ${JSON.stringify(context, null, 2)}`);
 
     const {
       template,
@@ -145,16 +151,19 @@ export class ActionService {
       }
     };
 
-    this.logger.log(`Sending email via EmailService: ${finalTemplate} to ${finalTo}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Sending email via EmailService: ${finalTemplate} to ${finalTo}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Subject: ${subject}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Template ID: ${templateId}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Execution ID: ${context?.executionId || 'unknown'}`);
 
     // Call the actual email service with execution context
     const emailResult = await this.emailService.sendEmail({
       ...emailData,
-      executionId: context.executionId,
-      stepId: context.currentStep || 'unknown'
+      executionId: context?.executionId,
+      stepId: context?.currentStep || 'unknown'
     });
 
-    this.logger.log(`Email sent successfully: ${JSON.stringify(emailResult)}`);
+    this.logger.log(`📧 [SEND MAIL ACTION] Email sent successfully: ${JSON.stringify(emailResult, null, 2)}`);
 
     return {
       action: 'send_email',
