@@ -1,6 +1,6 @@
 # Workflow Management System
 
-A sophisticated, enterprise-grade workflow automation platform built with React and NestJS. This system provides visual workflow creation, execution orchestration, and comprehensive state management for complex business processes.
+A workflow automation platform built with React and NestJS. This system provides visual workflow creation, execution orchestration, and state management for business processes.
 
 ## 🏗️ Architecture Overview
 
@@ -148,7 +148,9 @@ sequenceDiagram
     %% Styling
     note over U,F: Frontend Layer
     note over A: API Layer
-    note over W,N,E: Business Logic Layer
+    note over W: Business Logic Layer
+    note over N: Node Registry
+    note over E: Node Executor
     note over C: Scheduling Layer
     note over D: Data Layer
 ```
