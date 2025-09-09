@@ -53,6 +53,9 @@ export class WorkflowActionService {
         case 'log_activity':
           return await this.executeLogActivityAction(params);
 
+        case 'send_notification':
+          return await this.executeSendNotificationAction(params);
+
         default:
           this.logger.warn(`Unknown action type: ${params.actionType}`);
           return {
@@ -75,15 +78,19 @@ export class WorkflowActionService {
   private async executeEmailAction(params: ActionExecutionParams): Promise<ActionExecutionResult> {
     const { actionData, context, executionId, stepId } = params;
 
-    this.logger.log(`Sending email: ${actionData.subject} to ${context.metadata.userEmail}`);
+    // Log user details for verification
+    const userName = context.metadata?.userName || context.data?.name || 'Unknown';
+    const userEmail = context.metadata?.userEmail || context.data?.email || 'Unknown';
+
+    this.logger.log(`📧 EMAIL ACTION EXECUTED - User: ${userName} (${userEmail}) - Subject: ${actionData.subject} - Template: ${actionData.templateId || 'default'}`);
 
     const result = await this.emailService.sendEmail({
-      to: context.metadata.userEmail,
+      to: userEmail,
       subject: actionData.subject,
       templateId: actionData.templateId,
       data: {
-        userName: context.metadata.userName,
-        product: context.metadata.product,
+        userName: userName,
+        product: context.metadata?.product,
         ...actionData.data
       },
       executionId,
@@ -91,17 +98,20 @@ export class WorkflowActionService {
     });
 
     if (!result.success) {
+      this.logger.error(`❌ EMAIL FAILED - User: ${userName} (${userEmail}) - Error: ${result.error}`);
       return {
         success: false,
         error: `Email sending failed: ${result.error}`
       };
     }
 
+    this.logger.log(`✅ EMAIL SENT SUCCESSFULLY - User: ${userName} (${userEmail}) - Message ID: ${result.messageId || 'N/A'}`);
+
     return {
       success: true,
       result: {
         messageId: result.messageId,
-        to: context.metadata.userEmail,
+        to: userEmail,
         subject: actionData.subject,
         templateId: actionData.templateId
       },
@@ -396,7 +406,11 @@ export class WorkflowActionService {
   private async executeLogActivityAction(params: ActionExecutionParams): Promise<ActionExecutionResult> {
     const { actionData, context } = params;
 
-    this.logger.log(`Logging activity for user: ${context.userId}`);
+    // Get user details for logging
+    const userName = context.metadata?.userName || context.data?.name || 'Unknown';
+    const userEmail = context.metadata?.userEmail || context.data?.email || 'Unknown';
+
+    this.logger.log(`🏁 WORKFLOW END - User: ${userName} (${userEmail}) - Activity: ${actionData.activity}`);
 
     // Mock activity logging - in production, log to database
     const activityResult = {
@@ -486,6 +500,95 @@ export class WorkflowActionService {
 
       default:
         return false;
+    }
+  }
+
+  /**
+   * Execute send notification action
+   */
+  private async executeSendNotificationAction(params: ActionExecutionParams): Promise<ActionExecutionResult> {
+    const { actionData, context, executionId, stepId } = params;
+
+    this.logger.log(`Sending notification: ${actionData.title} to user ${context.metadata.userId}`);
+
+    try {
+      const {
+        type,
+        title,
+        message,
+        channels = ['email'],
+        priority = 'normal'
+      } = actionData;
+
+      // Validate required fields
+      if (!type || !title || !message) {
+        return {
+          success: false,
+          error: `Missing required fields for notification: type, title, or message`
+        };
+      }
+
+      // Send notification via appropriate channels
+      const results = [];
+
+      for (const channel of channels) {
+        switch (channel) {
+          case 'email':
+            const emailResult = await this.emailService.sendEmail({
+              to: context.metadata.userEmail,
+              subject: title,
+              templateId: 'notification',
+              data: {
+                userName: context.metadata.userName,
+                message: message,
+                type: type,
+                priority: priority,
+                ...actionData.data
+              },
+              executionId,
+              stepId
+            });
+            results.push({ channel: 'email', success: emailResult.success, error: emailResult.error });
+            break;
+
+          case 'sms':
+            // SMS implementation would go here
+            this.logger.log(`Would send SMS notification: ${title} to ${context.metadata.userPhoneNumber}`);
+            results.push({ channel: 'sms', success: true, error: null });
+            break;
+
+          default:
+            this.logger.warn(`Unknown notification channel: ${channel}`);
+            results.push({ channel, success: false, error: `Unknown channel: ${channel}` });
+        }
+      }
+
+      const hasFailures = results.some(r => !r.success);
+
+      return {
+        success: !hasFailures,
+        result: {
+          action: 'send_notification',
+          actionName: params.actionName,
+          userId: context.metadata.userId,
+          type: type,
+          title: title,
+          message: message,
+          channels: channels,
+          priority: priority,
+          results: results,
+          status: hasFailures ? 'partial' : 'sent',
+          timestamp: new Date()
+        },
+        error: hasFailures ? `Some notification channels failed: ${results.filter(r => !r.success).map(r => r.error).join(', ')}` : undefined
+      };
+
+    } catch (error) {
+      this.logger.error(`Notification action execution failed: ${params.actionName}`, error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 

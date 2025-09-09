@@ -18,9 +18,11 @@ RUN npm install
 COPY . .
 
 # Create non-root user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nestjs -u 1001
 
-
-# Ensure dist directory exists and is owned by nestjs
+# Create dist directory and set ownership
+RUN mkdir -p /usr/src/app/dist && chown nestjs:nodejs /usr/src/app/dist
 
 # Expose port
 EXPOSE 4000
@@ -28,6 +30,9 @@ EXPOSE 4000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/health || exit 1
+
+# Switch to non-root user
+USER nestjs
 
 # Build the application first
 RUN npm run build

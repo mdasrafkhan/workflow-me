@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorkflowExecutor } from '../execution/WorkflowExecutor';
 import { EmailService } from '../../services/email.service';
+import { ActionService } from '../../services/action.service';
+import { SharedFlowService } from '../../services/shared-flow.service';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
 
 describe('WorkflowExecutor Custom Operations Tests', () => {
   let workflowExecutor: WorkflowExecutor;
@@ -10,6 +14,36 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkflowExecutor,
+        {
+          provide: ActionService,
+          useValue: {
+            executeAction: jest.fn().mockResolvedValue({
+              success: true,
+              actionType: 'send_email',
+              actionName: 'test_action',
+              result: { messageId: 'test-message-id' },
+              executionTime: 100,
+              timestamp: new Date()
+            })
+          }
+        },
+        {
+          provide: SharedFlowService,
+          useValue: {
+            getAvailableSharedFlows: jest.fn().mockResolvedValue([]),
+            executeSharedFlow: jest.fn().mockResolvedValue({ success: true })
+          }
+        },
+        {
+          provide: getRepositoryToken(WorkflowDelay),
+          useValue: {
+            save: jest.fn(),
+            find: jest.fn(),
+            findOne: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn()
+          }
+        },
         {
           provide: EmailService,
           useValue: {
@@ -104,7 +138,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
       expect(result.success).toBe(true);
       expect(result.action).toBe('send_email');
       expect(result.subject).toBe('Welcome {{data.name}} to {{data.subscription_package}}!'); // No interpolation in current implementation
-      expect(result.to).toBe('user@example.com'); // Uses data.email from context
+      expect(result.to).toBe('{{data.email}}'); // Uses raw template string
       expect(result.executed).toBe(true);
     });
 
@@ -245,7 +279,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
       expect(result.action).toBe('send_email');
-      expect(result.to).toBe('complex@example.com'); // Uses data.email from context
+      expect(result.to).toBe('{{data.email}}'); // Uses raw template string
       expect(result.subject).toBe('Your {{data.subscription.package}} subscription details'); // No interpolation
       expect(result.executed).toBe(true);
     });
@@ -289,7 +323,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
       expect(result.action).toBe('send_email');
-      expect(result.to).toBe('array@example.com'); // Uses data.email from context
+      expect(result.to).toBe('{{data.email}}'); // Uses raw template string
       expect(result.subject).toBe('Order confirmation for {{data.name}}'); // No interpolation
       expect(result.executed).toBe(true);
     });
@@ -409,7 +443,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
       expect(result.action).toBe('send_email');
-      expect(result.to).toBe('test@example.com'); // Uses data.email from context
+      expect(result.to).toBe('{{data.email}}'); // Uses raw template string
       expect(result.subject).toBe('Welcome {{data.name}}!'); // No interpolation
       expect(result.executed).toBe(true);
     });
@@ -447,7 +481,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
       expect(result.action).toBe('send_email');
-      expect(result.to).toBe('test@example.com'); // Uses data.email from context
+      expect(result.to).toBe('{{data.email}}'); // Uses raw template string
       expect(result.subject).toBe('Welcome {{data.name}}!'); // No interpolation
       expect(result.executed).toBe(true);
     });

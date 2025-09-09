@@ -33,6 +33,15 @@ export interface WorkflowExecutionResult {
   executionTime: number;
   steps: ExecutionStep[];
   timestamp: Date;
+  metadata?: {
+    executionId?: string;
+    completedSteps?: number;
+    totalSteps?: number;
+    userId?: string;
+    workflowId?: string;
+    source?: string;
+    timestamp?: Date;
+  };
 }
 
 export interface WorkflowExecutionHistory {

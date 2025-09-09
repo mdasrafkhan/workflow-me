@@ -10,7 +10,7 @@ The Workflow Management System is built on a microservices architecture with cle
 
 - **Frontend**: React-based visual workflow editor with React Flow
 - **Backend**: NestJS API with TypeORM and PostgreSQL
-- **Scheduler**: Node-cron based job processing
+- **Scheduler**: Node-cron based job processing with per-workflow execution tracking
 - **State Management**: XState for complex state machines
 - **Logic Engine**: JSON Logic JS for business rule evaluation
 - **Storage**: PostgreSQL for persistence, Redis for caching
@@ -90,6 +90,21 @@ graph TB
     EMAIL --> EMAIL_LOG
     NE --> WEBHOOK
     NE --> SMS
+
+    %% Styling
+    classDef frontend fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#ffffff
+    classDef api fill:#7c2d12,stroke:#dc2626,stroke-width:2px,color:#ffffff
+    classDef business fill:#2d5a27,stroke:#4a9d4a,stroke-width:2px,color:#ffffff
+    classDef scheduling fill:#7c2d12,stroke:#dc2626,stroke-width:2px,color:#ffffff
+    classDef data fill:#374151,stroke:#6b7280,stroke-width:2px,color:#ffffff
+    classDef external fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#ffffff
+
+    class UI,VWE,RF frontend
+    class API,WC,HC api
+    class WOE,NR,NE,SM business
+    class CRON,BQ,DP scheduling
+    class PG,RD,WF,EX,DL,EMAIL_LOG data
+    class EMAIL,WEBHOOK,SMS external
 ```
 
 ### Workflow Execution Flow
@@ -129,6 +144,75 @@ sequenceDiagram
     C->>W: Process Pending Delays (Every 30s)
     W->>D: Query Delayed Executions
     W->>W: Resume Workflow
+
+    %% Styling
+    note over U,F: Frontend Layer
+    note over A: API Layer
+    note over W,N,E: Business Logic Layer
+    note over C: Scheduling Layer
+    note over D: Data Layer
+```
+
+### User Creation Workflow Data Flow
+
+```mermaid
+flowchart TD
+    %% User Creation Workflow Execution Flow
+    A[User Created in Database] --> B[Cron Scheduler Runs Every 30s]
+    B --> C[Query workflow_executions_schedule]
+    C --> D{Last Execution Time}
+    D --> E[Query Users Created Since Last Run]
+    E --> F[For Each New User]
+    F --> G[Load Workflow Definition]
+    G --> H[Create Workflow Execution]
+    H --> I[Execute Trigger Node]
+    I --> J{User Condition Check}
+    J -->|Pass| K[Execute Action Node]
+    J -->|Fail| L[Skip Workflow]
+    K --> M[Send Email Action]
+    M --> N[Execute Delay Node]
+    N --> O[Create Delay Record]
+    O --> P[Update Execution State]
+    P --> Q[Schedule Resume]
+    Q --> R[Wait for Delay Period]
+    R --> S[Delay Processor Runs]
+    S --> T[Resume Workflow]
+    T --> U[Execute End Node]
+    U --> V[Mark Execution Complete]
+    V --> W[Update Schedule Time]
+    W --> X[Log Completion]
+
+    %% Error Handling
+    G --> Y{Workflow Found?}
+    Y -->|No| Z[Log Error & Skip]
+    Y -->|Yes| H
+
+    M --> AA{Email Sent?}
+    AA -->|Success| N
+    AA -->|Failed| BB[Log Error & Continue]
+    BB --> N
+
+    %% Recovery Process
+    CC[System Restart] --> DD[Recovery Service]
+    DD --> EE[Query Pending Executions]
+    EE --> FF[Query Pending Delays]
+    FF --> GG[Resume Interrupted Workflows]
+    GG --> HH[Update Schedule Times]
+
+    %% Styling
+    classDef startEnd fill:#2d5a27,stroke:#4a9d4a,stroke-width:3px,color:#ffffff
+    classDef process fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#ffffff
+    classDef decision fill:#7c2d12,stroke:#dc2626,stroke-width:2px,color:#ffffff
+    classDef error fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#ffffff
+    classDef database fill:#374151,stroke:#6b7280,stroke-width:2px,color:#ffffff
+    classDef recovery fill:#2d5a27,stroke:#4a9d4a,stroke-width:2px,color:#ffffff
+
+    class A,V,X startEnd
+    class B,E,F,G,H,I,K,M,N,O,P,Q,R,S,T,U,W process
+    class D,J,Y,AA decision
+    class Z,BB error
+    class C database
+    class DD,EE,FF,GG,HH recovery
 ```
 
 ### Database Schema
@@ -138,6 +222,7 @@ erDiagram
     WORKFLOW ||--o{ VISUAL_WORKFLOW : "has"
     WORKFLOW ||--o{ WORKFLOW_EXECUTION : "executes"
     WORKFLOW_EXECUTION ||--o{ WORKFLOW_DELAY : "suspends"
+    WORKFLOW ||--o{ WORKFLOW_EXECUTIONS_SCHEDULE : "schedules"
 
     WORKFLOW {
         uuid id PK
@@ -183,7 +268,52 @@ erDiagram
         timestamp createdAt
         timestamp updatedAt
     }
+
+    WORKFLOW_EXECUTIONS_SCHEDULE {
+        uuid id PK
+        uuid workflowId FK
+        string triggerType
+        string triggerId
+        timestamp lastExecutedAt
+        timestamp createdAt
+        timestamp updatedAt
+    }
+
+    %% Styling
+    classDef core fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#ffffff
+    classDef visual fill:#7c2d12,stroke:#dc2626,stroke-width:2px,color:#ffffff
+    classDef execution fill:#2d5a27,stroke:#4a9d4a,stroke-width:2px,color:#ffffff
+    classDef delay fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#ffffff
+    classDef schedule fill:#374151,stroke:#6b7280,stroke-width:2px,color:#ffffff
+
+    class WORKFLOW core
+    class VISUAL_WORKFLOW visual
+    class WORKFLOW_EXECUTION execution
+    class WORKFLOW_DELAY delay
+    class WORKFLOW_EXECUTIONS_SCHEDULE schedule
 ```
+
+### Scheduler Architecture
+
+The workflow system uses a sophisticated scheduling mechanism that tracks execution times per workflow:
+
+#### Per-Workflow Execution Tracking
+- **`workflow_executions_schedule`** table stores the last execution time for each workflow
+- **Persistent State**: Survives system restarts and maintains execution history
+- **Trigger-Specific**: Each workflow can have different trigger types (user_created, subscription_changed, etc.)
+- **Incremental Processing**: Only processes new data since last execution
+
+#### Execution Flow
+1. **Cron Trigger**: Every 30 seconds, the scheduler activates
+2. **Workflow Iteration**: For each active workflow, check its last execution time
+3. **Data Query**: Query for new trigger data since last execution
+4. **Execution**: Process each new trigger with the workflow
+5. **State Update**: Update the last execution time for the workflow
+
+#### Recovery Mechanism
+- **Startup Recovery**: On system restart, recovery service resumes interrupted workflows
+- **Delay Processing**: Processes any pending delays that were scheduled before restart
+- **State Validation**: Ensures workflow state consistency after recovery
 
 ### External Services
 

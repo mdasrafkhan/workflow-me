@@ -89,6 +89,7 @@ export interface WorkflowExecutionContext {
  */
 export interface WorkflowExecution {
   id: string;
+  executionId: string;
   workflowId: string;
   status: string;
   // Add other properties as needed

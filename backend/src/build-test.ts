@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { WorkflowOrchestrationEngine } from './workflow/execution/workflow-orchestration-engine';
 import { DummyDataService } from './services/dummy-data.service';
 import { EmailService } from './services/email.service';
+import { TestDataCleanupService } from './test-utils/test-data-cleanup.service';
 import { Repository } from 'typeorm';
 import { WorkflowExecution } from './database/entities/workflow-execution.entity';
 import { WorkflowDelay } from './database/entities/workflow-delay.entity';
@@ -28,6 +29,7 @@ class WorkflowTestSuite {
   private workflowEngine: WorkflowOrchestrationEngine;
   private dummyDataService: DummyDataService;
   private emailService: EmailService;
+  private testDataCleanupService: TestDataCleanupService;
 
   constructor(
     executionRepo: Repository<WorkflowExecution>,
@@ -37,7 +39,8 @@ class WorkflowTestSuite {
     workflowRepo: Repository<JsonLogicRule>,
     workflowEngine: WorkflowOrchestrationEngine,
     dummyDataService: DummyDataService,
-    emailService: EmailService
+    emailService: EmailService,
+    testDataCleanupService: TestDataCleanupService
   ) {
     this.executionRepo = executionRepo;
     this.delayRepo = delayRepo;
@@ -47,6 +50,7 @@ class WorkflowTestSuite {
     this.workflowEngine = workflowEngine;
     this.dummyDataService = dummyDataService;
     this.emailService = emailService;
+    this.testDataCleanupService = testDataCleanupService;
   }
 
   private addResult(testName: string, success: boolean, error?: string, details?: any) {
@@ -65,32 +69,14 @@ class WorkflowTestSuite {
     console.log('🧹 Cleaning up test data...');
 
     try {
-      // Clear test workflow executions (only those with test patterns)
-      await this.executionRepo
-        .createQueryBuilder()
-        .delete()
-        .where("executionId LIKE :pattern OR workflowId LIKE :pattern", { pattern: 'test-%' })
-        .execute();
+      // Use the dedicated test data cleanup service
+      const result = await this.testDataCleanupService.cleanupTestData();
 
-      // Clear test workflow delays (only those with test patterns)
-      await this.delayRepo
-        .createQueryBuilder()
-        .delete()
-        .where("executionId LIKE :pattern", { pattern: 'test-%' })
-        .execute();
-
-      // Clear test emails
+      // Also clean up additional test data not covered by the service
       await this.emailRepo
         .createQueryBuilder()
         .delete()
         .where("to LIKE :pattern", { pattern: 'test-%' })
-        .execute();
-
-      // Clear test visual workflows and workflows
-      await this.visualWorkflowRepo
-        .createQueryBuilder()
-        .delete()
-        .where("name LIKE :pattern", { pattern: 'test-%' })
         .execute();
 
       await this.workflowRepo
@@ -124,7 +110,7 @@ class WorkflowTestSuite {
         .where("email LIKE :pattern", { pattern: 'test-%' })
         .execute();
 
-      this.addResult('Cleanup Test Data', true);
+      this.addResult('Cleanup Test Data', true, undefined, result);
     } catch (error) {
       this.addResult('Cleanup Test Data', false, error.message);
     }
@@ -617,6 +603,7 @@ async function runBuildTests() {
   const workflowEngine = app.get(WorkflowOrchestrationEngine);
   const dummyDataService = app.get(DummyDataService);
   const emailService = app.get(EmailService);
+  const testDataCleanupService = app.get(TestDataCleanupService);
 
   try {
     const testSuite = new WorkflowTestSuite(
@@ -627,7 +614,8 @@ async function runBuildTests() {
       workflowRepo,
       workflowEngine,
       dummyDataService,
-      emailService
+      emailService,
+      testDataCleanupService
     );
 
     const success = await testSuite.runAllTests();

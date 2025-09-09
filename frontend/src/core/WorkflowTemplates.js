@@ -246,8 +246,8 @@ export function initializeDefaultTemplates() {
         type: 'delay-node',
         position: { x: 300, y: 450 },
         data: {
-          delayType: '2_days',
-          label: 'Wait 2-3 days'
+          delayType: '2_minutes',
+          label: 'Wait 2 minutes'
         }
       },
       {

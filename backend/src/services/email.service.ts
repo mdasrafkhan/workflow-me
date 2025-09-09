@@ -353,7 +353,6 @@ export class EmailService {
     failed: number;
     byTemplate: Record<string, number>;
   }> {
-    this.logger.log(`📧 [EXTERNAL EMAIL SERVICE] Requesting email stats for execution: ${executionId || 'all'}`);
 
     // External service - return empty stats
     return {

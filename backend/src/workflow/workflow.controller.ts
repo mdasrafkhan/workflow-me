@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-engine';
+import { WorkflowExecutor } from './execution/WorkflowExecutor';
 import { SubscriptionTriggerService } from '../services/subscription-trigger.service';
 import { NewsletterTriggerService } from '../services/newsletter-trigger.service';
 import { SharedFlowService } from '../services/shared-flow.service';
@@ -13,6 +14,7 @@ import { DummyDataService } from '../services/dummy-data.service';
 export class WorkflowController {
   constructor(
     private readonly workflowEngine: WorkflowOrchestrationEngine,
+    private readonly workflowExecutor: WorkflowExecutor,
     private readonly subscriptionTriggerService: SubscriptionTriggerService,
     private readonly newsletterTriggerService: NewsletterTriggerService,
     private readonly sharedFlowService: SharedFlowService,
@@ -46,11 +48,16 @@ export class WorkflowController {
   @Post('execute')
   async executeWorkflow(@Body() body: { workflow: any; context: any }) {
     try {
-      const result = await this.workflowEngine.executeWorkflow(body.workflow, body.context);
+      // Use WorkflowExecutor for JsonLogic rules
+      const result = await this.workflowExecutor.executeWorkflow(
+        body.context.workflowId || 'test-workflow',
+        body.workflow,
+        body.context
+      );
       return {
         success: true,
         result,
-        message: 'Workflow executed successfully using clean engine'
+        message: 'Workflow executed successfully using WorkflowExecutor'
       };
     } catch (error) {
       return {
@@ -98,7 +105,8 @@ export class WorkflowController {
   // Subscription Trigger Endpoints
   @Get('triggers/subscriptions')
   async getSubscriptionTriggers(@Query('secondsAgo') secondsAgo: number = 30) {
-    return await this.subscriptionTriggerService.retrieveTriggerData(secondsAgo);
+    const cutoff = new Date(Date.now() - secondsAgo * 1000);
+    return await this.subscriptionTriggerService.retrieveTriggerData(cutoff);
   }
 
   @Get('triggers/subscriptions/statistics')
@@ -127,7 +135,8 @@ export class WorkflowController {
   // Newsletter Trigger Endpoints
   @Get('triggers/newsletters')
   async getNewsletterTriggers(@Query('secondsAgo') secondsAgo: number = 30) {
-    return await this.newsletterTriggerService.retrieveTriggerData(secondsAgo);
+    const cutoff = new Date(Date.now() - secondsAgo * 1000);
+    return await this.newsletterTriggerService.retrieveTriggerData(cutoff);
   }
 
   @Get('triggers/newsletters/statistics')
@@ -380,4 +389,6 @@ export class WorkflowController {
     await this.workflowService.remove(id);
     return { message: 'Workflow deleted successfully' };
   }
+
+
 }

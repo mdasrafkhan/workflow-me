@@ -13,6 +13,7 @@ import { WorkflowStateMachineService } from './workflow/state-machine/workflow-s
 import { HealthController } from './health.controller';
 import { WorkflowController } from './workflow/workflow.controller';
 import { WorkflowModule } from './workflow/workflow.module';
+import { TestUtilsModule } from './test-utils/test-utils.module';
 import { DummyUser } from './database/entities/dummy-user.entity';
 import { DummySubscription } from './database/entities/dummy-subscription.entity';
 import { DummySubscriptionType } from './database/entities/dummy-subscription-type.entity';
@@ -20,6 +21,7 @@ import { DummyNewsletter } from './database/entities/dummy-newsletter.entity';
 import { WorkflowExecution } from './database/entities/workflow-execution.entity';
 import { WorkflowDelay } from './database/entities/workflow-delay.entity';
 import { EmailLog } from './database/entities/email-log.entity';
+import { WorkflowExecutionSchedule } from './database/entities/workflow-execution-schedule.entity';
 import { VisualWorkflow } from './workflow/visual-workflow.entity';
 import { JsonLogicRule } from './workflow/json-logic-rule.entity';
 
@@ -45,11 +47,12 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
         WorkflowExecution,
         WorkflowDelay,
         EmailLog,
+        WorkflowExecutionSchedule,
         VisualWorkflow,
         JsonLogicRule
       ],
       synchronize: false, // Disabled to prevent conflicts with manual UUID migration
-      logging: process.env.NODE_ENV === 'development'
+      logging: false // Disabled to reduce log noise
     }),
     TypeOrmModule.forFeature([
       DummyUser,
@@ -59,10 +62,12 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
       WorkflowExecution,
       WorkflowDelay,
       EmailLog,
+      WorkflowExecutionSchedule,
       VisualWorkflow,
       JsonLogicRule
     ]),
-    WorkflowModule
+    WorkflowModule,
+    TestUtilsModule
   ],
   controllers: [HealthController, WorkflowController],
   providers: [

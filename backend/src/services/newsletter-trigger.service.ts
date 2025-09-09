@@ -19,15 +19,16 @@ export class NewsletterTriggerService {
   /**
    * Retrieve all new newsletter subscriptions that need workflow processing
    */
-  async retrieveTriggerData(secondsAgo: number = 30): Promise<TriggerData[]> {
-    const cutoff = new Date(Date.now() - secondsAgo * 1000);
+  async retrieveTriggerData(lastRunTime?: Date): Promise<TriggerData[]> {
+    // Use provided lastRunTime or fall back to 1 hour ago
+    const cutoff = lastRunTime || new Date(Date.now() - 60 * 60 * 1000);
 
-    this.logger.log(`Retrieving newsletter triggers from last ${secondsAgo} seconds`);
+    this.logger.log(`Retrieving newsletter triggers since ${cutoff.toISOString()}`);
 
     const newsletters = await this.newsletterRepository
       .createQueryBuilder('newsletter')
       .leftJoinAndSelect('newsletter.user', 'user')
-      .where('newsletter.subscribedAt >= :cutoff', { cutoff })
+      .where('newsletter.subscribedAt > :cutoff', { cutoff })
       .andWhere('newsletter.workflowProcessed = :processed', { processed: false })
       .andWhere('newsletter.status = :status', { status: 'subscribed' })
       .orderBy('newsletter.subscribedAt', 'ASC')

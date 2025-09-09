@@ -234,7 +234,7 @@ export class SharedFlowService {
     sharedFlowData: any
   ): Promise<void> {
     const execution = await this.executionRepository.findOne({
-      where: { id: executionId }
+      where: { executionId: executionId }
     });
 
     if (execution) {
@@ -293,7 +293,7 @@ export class SharedFlowService {
    */
   async getSharedFlowHistory(executionId: string): Promise<any[]> {
     const execution = await this.executionRepository.findOne({
-      where: { id: executionId }
+      where: { executionId: executionId }
     });
 
     if (!execution || !execution.state.sharedFlows) {

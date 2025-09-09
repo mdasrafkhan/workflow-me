@@ -190,6 +190,49 @@ NodeRegistry.registerNodeType("newsletter-trigger", {
   }),
 });
 
+NodeRegistry.registerNodeType("user-trigger", {
+  category: "1. Triggers",
+  subcategory: "User Events",
+  icon: "👤",
+  color: "#e91e63",
+  label: "User Trigger",
+  description: "Triggers when a user is created or registers",
+  properties: [
+    {
+      key: "triggerEvent",
+      type: "select",
+      label: "Trigger Event",
+      options: [
+        { value: "user_created", label: "User created" },
+        { value: "user_registers", label: "User registers" },
+        { value: "user_updated", label: "User updated" },
+        { value: "user_deleted", label: "User deleted" }
+      ],
+      required: true,
+      default: "user_created"
+    },
+    {
+      key: "reEntryRule",
+      type: "select",
+      label: "Re-entry Rule",
+      options: [
+        { value: "once_per_user", label: "Once per user" },
+        { value: "always", label: "Always" },
+        { value: "never", label: "Never" }
+      ],
+      required: true,
+      default: "once_per_user"
+    }
+  ],
+  jsonLogicConverter: (node) => ({
+    trigger: {
+      event: node.data?.triggerEvent || "user_created",
+      reEntryRule: node.data?.reEntryRule || "once_per_user",
+      execute: true,
+    },
+  }),
+});
+
 // ============================================================================
 // 2. CONDITIONS - Branching logic (What to check)
 // ============================================================================
@@ -263,6 +306,155 @@ NodeRegistry.registerNodeType("condition", {
       condition[conditionType] = { "in": conditionValue.split(",").map(v => v.trim()) };
     } else if (operator === "not_in") {
       condition[conditionType] = { "!": { "in": conditionValue.split(",").map(v => v.trim()) } };
+    }
+
+    return condition;
+  },
+});
+
+// User Condition Node - Specialized for user data
+NodeRegistry.registerNodeType("user-condition", {
+  category: "2. Conditions",
+  subcategory: "User Conditions",
+  icon: "👤",
+  color: "#2196f3",
+  label: "User Condition Node",
+  description: "Condition node specifically for user data (notifications and language)",
+  properties: [
+    {
+      key: "userField",
+      type: "select",
+      label: "User Field",
+      options: [
+        { value: "preferences.notifications", label: "Notifications" },
+        { value: "preferences.language", label: "Language" }
+      ],
+      required: true,
+      default: "preferences.notifications"
+    },
+    {
+      key: "operator",
+      type: "select",
+      label: "Operator",
+      options: [
+        { value: "equals", label: "Equals" },
+        { value: "not_equals", label: "Not Equals" },
+        { value: "true", label: "Is True" },
+        { value: "false", label: "Is False" }
+      ],
+      required: true,
+      default: "true"
+    },
+    {
+      key: "value",
+      type: "text",
+      label: "Value",
+      placeholder: "true/false for notifications, en/ja/etc for language",
+      required: false,
+      default: ""
+    }
+  ],
+  jsonLogicConverter: (node) => {
+    const userField = node.data?.userField || "preferences.notifications";
+    const operator = node.data?.operator || "true";
+    const value = node.data?.value || "";
+
+    // Build the condition based on operator
+    let condition = {};
+
+    if (operator === "equals") {
+      condition["=="] = [{ "var": `user.${userField}` }, value];
+    } else if (operator === "not_equals") {
+      condition["!="] = [{ "var": `user.${userField}` }, value];
+    } else if (operator === "true") {
+      condition["=="] = [{ "var": `user.${userField}` }, true];
+    } else if (operator === "false") {
+      condition["=="] = [{ "var": `user.${userField}` }, false];
+    }
+
+    return condition;
+  },
+});
+
+// Subscription Condition Node - Specialized for subscription data
+NodeRegistry.registerNodeType("subscription-condition", {
+  category: "2. Conditions",
+  subcategory: "Subscription Conditions",
+  icon: "💳",
+  color: "#9c27b0",
+  label: "Subscription Condition",
+  description: "Condition node specifically for subscription data (product, status, amount, etc.)",
+  properties: [
+    {
+      key: "subscriptionField",
+      type: "select",
+      label: "Subscription Field",
+      options: [
+        { value: "product", label: "Product" },
+        { value: "status", label: "Status" },
+        { value: "amount", label: "Amount" },
+        { value: "currency", label: "Currency" },
+        { value: "billingCycle", label: "Billing Cycle" },
+        { value: "custom", label: "Custom Field" }
+      ],
+      required: true,
+      default: "product"
+    },
+    {
+      key: "customField",
+      type: "text",
+      label: "Custom Field Path",
+      placeholder: "e.g., metadata.custom_field",
+      required: false,
+      default: ""
+    },
+    {
+      key: "operator",
+      type: "select",
+      label: "Operator",
+      options: [
+        { value: "equals", label: "Equals" },
+        { value: "not_equals", label: "Not Equals" },
+        { value: "greater_than", label: "Greater Than" },
+        { value: "less_than", label: "Less Than" },
+        { value: "in", label: "In List" },
+        { value: "not_in", label: "Not In List" }
+      ],
+      required: true,
+      default: "equals"
+    },
+    {
+      key: "value",
+      type: "text",
+      label: "Value",
+      placeholder: "Value to compare against",
+      required: true,
+      default: ""
+    }
+  ],
+  jsonLogicConverter: (node) => {
+    const subscriptionField = node.data?.subscriptionField || "product";
+    const customField = node.data?.customField || "";
+    const operator = node.data?.operator || "equals";
+    const value = node.data?.value || "";
+
+    const fieldPath = subscriptionField === "custom" ? customField : subscriptionField;
+
+    // Build the condition based on operator
+    let condition = {};
+
+    if (operator === "equals") {
+      condition["=="] = [{ "var": `subscription.${fieldPath}` }, value];
+    } else if (operator === "not_equals") {
+      condition["!="] = [{ "var": `subscription.${fieldPath}` }, value];
+    } else if (operator === "greater_than") {
+      condition[">"] = [{ "var": `subscription.${fieldPath}` }, parseFloat(value)];
+    } else if (operator === "less_than") {
+      condition["<"] = [{ "var": `subscription.${fieldPath}` }, parseFloat(value)];
+    } else if (operator === "in") {
+      condition["in"] = [{ "var": `subscription.${fieldPath}` }, value.split(",").map(v => v.trim())];
+    } else if (operator === "not_in") {
+      condition["!"] = { "in": [{ "var": `subscription.${fieldPath}` }, value.split(",").map(v => v.trim())] };
     }
 
     return condition;
@@ -349,7 +541,8 @@ NodeRegistry.registerNodeType("action", {
 // 4. TIMING - Delays and scheduling (When to execute)
 // ============================================================================
 
-NodeRegistry.registerNodeType("delay-node", {
+// Register both "delay-node" and "delay" types for compatibility
+const delayNodeConfig = {
   category: "4. Timing",
   subcategory: "Delays",
   icon: "⏰",
@@ -362,6 +555,12 @@ NodeRegistry.registerNodeType("delay-node", {
       type: "select",
       label: "Delay Type",
       options: [
+        { value: "1_minute", label: "1 minute" },
+        { value: "2_minutes", label: "2 minutes" },
+        { value: "5_minutes", label: "5 minutes" },
+        { value: "10_minutes", label: "10 minutes" },
+        { value: "30_minutes", label: "30 minutes" },
+        { value: "1_hour", label: "1 hour" },
         { value: "2_days", label: "2-3 days" },
         { value: "5_days", label: "5-7 days" },
         { value: "1_week", label: "1 week" },
@@ -382,7 +581,7 @@ NodeRegistry.registerNodeType("delay-node", {
     }
   ],
   jsonLogicConverter: (node) => {
-    const delayType = node.data?.delayType || "2_days";
+    const delayType = node.data?.delayType || node.data?.type || "2_days";
     const customDelay = node.data?.customDelay || "";
 
     let delayValue = delayType;
@@ -397,7 +596,10 @@ NodeRegistry.registerNodeType("delay-node", {
       },
     };
   },
-});
+};
+
+NodeRegistry.registerNodeType("delay-node", delayNodeConfig);
+NodeRegistry.registerNodeType("delay", delayNodeConfig);
 
 // ============================================================================
 // 5. FLOW CONTROL - Workflow structure (How to organize)

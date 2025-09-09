@@ -945,7 +945,7 @@ function App() {
                   <select
                     value={selectedWorkflow?.id || ""}
                     onChange={(e) => {
-                      const workflowId = parseInt(e.target.value);
+                      const workflowId = e.target.value;
                       const workflow = workflows.find(
                         (wf) => wf.id === workflowId
                       );

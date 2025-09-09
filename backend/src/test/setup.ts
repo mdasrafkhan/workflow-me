@@ -4,10 +4,10 @@ import 'reflect-metadata';
 // Configure test environment
 process.env.NODE_ENV = 'test';
 process.env.TEST_DB_HOST = 'localhost';
-process.env.TEST_DB_PORT = '5432';
-process.env.TEST_DB_USER = 'test_user';
-process.env.TEST_DB_PASSWORD = 'test_password';
-process.env.TEST_DB_NAME = 'workflow_test';
+process.env.TEST_DB_PORT = '15432'; // Docker mapped port for main database
+process.env.TEST_DB_USER = 'workflow_user';
+process.env.TEST_DB_PASSWORD = 'workflow_password';
+process.env.TEST_DB_NAME = 'workflow_db';
 
 // Mock console methods to reduce noise in tests
 global.console = {

@@ -82,6 +82,7 @@ services:
     command: ["npm", "test", "--", "--watchAll=false", "--passWithNoTests"]
     networks:
       - workflow-network
+    user: "1001:1001"
 
   backend:
     build:
@@ -126,9 +127,11 @@ services:
     volumes:
       - ../backend:/usr/src/app
       - /usr/src/app/node_modules
+      - /usr/src/app/dist
     networks:
       - workflow-network
     restart: unless-stopped
+    user: "1001:1001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
@@ -164,8 +167,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    profiles:
-      - testing
 
   # Workflow Test Runner
   workflow-tester:

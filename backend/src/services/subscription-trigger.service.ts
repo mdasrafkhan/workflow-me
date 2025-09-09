@@ -22,16 +22,17 @@ export class SubscriptionTriggerService {
   /**
    * Retrieve all new subscriptions that need workflow processing
    */
-  async retrieveTriggerData(secondsAgo: number = 30): Promise<TriggerData[]> {
-    const cutoff = new Date(Date.now() - secondsAgo * 1000);
+  async retrieveTriggerData(lastRunTime?: Date): Promise<TriggerData[]> {
+    // Use provided lastRunTime or fall back to 1 hour ago
+    const cutoff = lastRunTime || new Date(Date.now() - 60 * 60 * 1000);
 
-    this.logger.log(`Retrieving subscription triggers from last ${secondsAgo} seconds`);
+    this.logger.log(`Retrieving subscription triggers since ${cutoff.toISOString()}`);
 
     const subscriptions = await this.subscriptionRepository
       .createQueryBuilder('subscription')
       .leftJoinAndSelect('subscription.user', 'user')
       .leftJoinAndSelect('subscription.subscriptionType', 'subscriptionType')
-      .where('subscription.createdAt >= :cutoff', { cutoff })
+      .where('subscription.createdAt > :cutoff', { cutoff })
       .andWhere('subscription.workflowProcessed = :processed', { processed: false })
       .andWhere('subscription.status = :status', { status: 'active' })
       .orderBy('subscription.createdAt', 'ASC')

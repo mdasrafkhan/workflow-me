@@ -9,6 +9,7 @@ import { WorkflowExecutor } from './execution/WorkflowExecutor';
 import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-engine';
 import { SubscriptionTriggerService } from '../services/subscription-trigger.service';
 import { NewsletterTriggerService } from '../services/newsletter-trigger.service';
+import { UserTriggerService } from '../services/user-trigger.service';
 import { SharedFlowService } from '../services/shared-flow.service';
 import { WorkflowActionService } from '../services/workflow-action.service';
 import { WorkflowRecoveryService } from '../services/workflow-recovery.service';
@@ -20,6 +21,7 @@ import { DummySubscriptionType } from '../database/entities/dummy-subscription-t
 import { DummyNewsletter } from '../database/entities/dummy-newsletter.entity';
 import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../database/entities/workflow-delay.entity';
+import { WorkflowExecutionSchedule } from '../database/entities/workflow-execution-schedule.entity';
 import { DummyDataService } from '../services/dummy-data.service';
 import { WorkflowStateMachineService } from './state-machine/workflow-state-machine';
 import { NodesModule } from './nodes/nodes.module';
@@ -34,7 +36,8 @@ import { NodesModule } from './nodes/nodes.module';
       DummySubscriptionType,
       DummyNewsletter,
       WorkflowExecution,
-      WorkflowDelay
+      WorkflowDelay,
+      WorkflowExecutionSchedule
     ]),
     NodesModule // Import the new nodes module
   ],
@@ -45,6 +48,7 @@ import { NodesModule } from './nodes/nodes.module';
     WorkflowOrchestrationEngine, // Use the new clean engine
     SubscriptionTriggerService,
     NewsletterTriggerService,
+    UserTriggerService,
     SharedFlowService,
     WorkflowActionService,
     WorkflowRecoveryService,

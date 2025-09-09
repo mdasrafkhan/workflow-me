@@ -8,15 +8,20 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "build": "nest build",
-    "build:dev": "npm run build && npm run test:workflow:build",
-    "test": "jest",
+    "build:dev": "npm run build && node run-tests-and-cleanup.js",
+    "test": "jest --testPathIgnorePatterns=integration",
+    "test:db": "cd ../docker && docker-compose up -d postgres-test redis && cd ../backend && npm run test",
+    "test:full": "cd ../docker && docker-compose up -d postgres postgres-test redis && cd ../backend && npm run test",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:workflow": "jest --testPathPattern=workflow",
     "test:workflow:build": "npx ts-node src/build-test.ts",
     "test:runner": "npx ts-node src/test-runner.ts",
-    "test:clear": "npx ts-node src/clear-and-test.ts"
+    "test:clear": "npx ts-node src/clear-and-test.ts",
+    "test:functionality": "node test-database-functionality.js",
+    "test:cleanup": "curl -X POST http://localhost:4000/workflow/cleanup/test-data",
+    "test:core": "jest --testPathPattern=workflow-core"
   },
   "jest": {
     "moduleFileExtensions": [

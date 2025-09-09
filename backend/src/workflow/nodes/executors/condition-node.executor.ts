@@ -31,28 +31,40 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
 
     try {
       const conditionData = step.data;
-      const conditionType = conditionData.conditionType || 'product_package';
-      const conditionValue = conditionData.conditionValue;
-      const operator = conditionData.operator || 'equals';
+      let conditionResult: boolean;
 
-      // Evaluate condition
-      const conditionResult = this.evaluateCondition(
-        conditionType,
-        conditionValue,
-        operator,
-        context.data
-      );
+      // Check if it's a generic condition with custom JsonLogic rule
+      if (conditionData.condition && typeof conditionData.condition === 'object') {
+        // Use JsonLogic to evaluate the custom condition
+        const jsonLogic = require('json-logic-js');
+        conditionResult = jsonLogic.apply(conditionData.condition, context.data);
+        this.logger.log(`Generic condition evaluated with JsonLogic: ${JSON.stringify(conditionData.condition)} = ${conditionResult}`);
+      } else {
+        // Use structured condition evaluation
+        const conditionType = conditionData.conditionType || 'product_package';
+        const conditionValue = conditionData.conditionValue;
+        const operator = conditionData.operator || 'equals';
+
+        // Evaluate condition
+        conditionResult = this.evaluateCondition(
+          conditionType,
+          conditionValue,
+          operator,
+          context.data
+        );
+
+        this.logger.log(`Structured condition evaluated: ${conditionType} ${operator} ${conditionValue} = ${conditionResult}`);
+      }
 
       // Determine next steps based on condition result
       const nextSteps = this.determineNextSteps(step, conditionResult);
 
-      this.logger.log(`Condition evaluated: ${conditionType} ${operator} ${conditionValue} = ${conditionResult}`);
-
       const result = this.createSuccessResult(
         {
-          conditionType,
-          conditionValue,
-          operator,
+          conditionType: conditionData.conditionType,
+          conditionValue: conditionData.conditionValue,
+          operator: conditionData.operator,
+          customCondition: conditionData.condition,
           result: conditionResult,
           evaluatedAt: new Date().toISOString()
         },
@@ -87,18 +99,29 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
     const warnings = [...baseValidation.warnings];
 
     // Validate condition-specific properties
-    if (!step.data?.conditionType) {
-      errors.push('Condition type is required');
+    // Check if it's a structured condition (with conditionType and conditionValue)
+    // or a generic condition (with custom condition JsonLogic rule)
+    const hasStructuredCondition = step.data?.conditionType && step.data?.conditionValue;
+    const hasGenericCondition = step.data?.condition && typeof step.data.condition === 'object';
+
+    if (!hasStructuredCondition && !hasGenericCondition) {
+      errors.push('Either condition type/value or custom condition rule is required');
     }
 
-    if (!step.data?.conditionValue) {
-      errors.push('Condition value is required');
+    if (hasStructuredCondition) {
+      if (!step.data?.conditionType) {
+        errors.push('Condition type is required');
+      }
+
+      if (!step.data?.conditionValue) {
+        errors.push('Condition value is required');
+      }
     }
 
     // Validate condition type
     const validConditionTypes = [
       'product_package', 'user_segment', 'subscription_status',
-      'email_domain', 'custom_field', 'date_range'
+      'email_domain', 'custom_field', 'date_range', 'user_condition'
     ];
 
     if (step.data?.conditionType && !validConditionTypes.includes(step.data.conditionType)) {
@@ -144,6 +167,23 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
         actualValue = contextData[conditionValue.field] || contextData.custom_fields?.[conditionValue.field];
         conditionValue = conditionValue.value;
         break;
+      case 'user_condition':
+        // Handle user condition with preferences.notifications or preferences.language
+        if (conditionValue.field) {
+          const fieldPath = conditionValue.field;
+          if (fieldPath === 'preferences.notifications') {
+            // Check both user.preferences.notifications and preferences.notifications
+            actualValue = contextData.user?.preferences?.notifications ?? contextData.preferences?.notifications;
+          } else if (fieldPath === 'preferences.language') {
+            // Check both user.preferences.language and preferences.language
+            actualValue = contextData.user?.preferences?.language ?? contextData.preferences?.language;
+          } else {
+            // Handle nested field access like user.preferences.notifications
+            actualValue = this.getNestedValue(contextData, fieldPath);
+          }
+          conditionValue = conditionValue.value;
+        }
+        break;
       default:
         actualValue = contextData[conditionType];
     }
@@ -183,6 +223,12 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
     });
 
     return matchingCondition ? [matchingCondition.next] : (step.next || []);
+  }
+
+  private getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => {
+      return current && current[key] !== undefined ? current[key] : undefined;
+    }, obj);
   }
 }
 

@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, MoreThan, LessThanOrEqual } from 'typeorm';
 import { VisualWorkflow } from './visual-workflow.entity';
 import { JsonLogicRule } from './json-logic-rule.entity';
 import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../database/entities/workflow-delay.entity';
+import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-engine';
 
 @Injectable()
 export class WorkflowService {
@@ -17,6 +18,7 @@ export class WorkflowService {
     private executionRepo: Repository<WorkflowExecution>,
     @InjectRepository(WorkflowDelay)
     private delayRepo: Repository<WorkflowDelay>,
+    private workflowOrchestrationEngine: WorkflowOrchestrationEngine,
   ) {}
 
   async findAll(): Promise<VisualWorkflow[]> {
@@ -155,11 +157,86 @@ export class WorkflowService {
     return workflows
       .filter(wf => wf.jsonLogicRule)
       .map(wf => ({
-        id: wf.id,
+        id: wf.workflowId, // Use the actual workflow table ID, not the visual workflow ID
         name: wf.name,
         jsonLogic: wf.jsonLogicRule.rule
       }));
   }
 
+  // Find recent executions for duplicate prevention
+  async findRecentExecutions(workflowId: string, userId: string, since: Date): Promise<any[]> {
+    try {
+      // Query the workflow executions repository for recent executions
+      const executions = await this.executionRepo.find({
+        where: {
+          workflowId: workflowId,
+          userId: userId,
+          createdAt: MoreThan(since)
+        },
+        order: {
+          createdAt: 'DESC'
+        }
+      });
+
+      return executions;
+    } catch (error) {
+      console.error('Error finding recent executions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Process delayed executions that are ready to run
+   */
+  async processDelayedExecutions(): Promise<void> {
+    const now = new Date();
+    console.log(`Processing delayed executions ready at ${now.toISOString()}`);
+
+    try {
+      // Query the database for pending delays where executeAt <= now
+      const readyDelays = await this.delayRepo.find({
+        where: {
+          status: 'pending',
+          executeAt: LessThanOrEqual(now)
+        },
+        order: {
+          executeAt: 'ASC'
+        }
+      });
+
+      console.log(`Found ${readyDelays.length} delayed executions ready to process`);
+
+      for (const delay of readyDelays) {
+        try {
+          console.log(`Processing delayed execution: ${delay.executionId}`);
+
+          // Get the workflow execution
+          const execution = await this.executionRepo.findOne({
+            where: { executionId: delay.executionId }
+          });
+
+          if (!execution) {
+            console.error(`Workflow execution not found: ${delay.executionId}`);
+            continue;
+          }
+
+          // Resume the workflow from the delay step
+          await this.workflowOrchestrationEngine.resumeWorkflowFromDelay(delay);
+
+          console.log(`Successfully processed delayed execution: ${delay.executionId}`);
+        } catch (error) {
+          console.error(`Error processing delayed execution ${delay.executionId}:`, error);
+
+          // Mark delay as failed
+          await this.delayRepo.update(delay.id, {
+            status: 'failed',
+            error: error.message
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error in processDelayedExecutions:', error);
+    }
+  }
 
 }

@@ -51,7 +51,7 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
 
       // Save delay to database
       const delayRecord = this.delayRepository.create({
-        executionId: execution.id,
+        executionId: execution.executionId,
         stepId: step.id,
         delayType: delayType,
         delayMs: delayHours * 60 * 60 * 1000,
@@ -114,7 +114,7 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
     }
 
     // Validate delay type
-    const validTypes = ['1_hour', '1_day', '2_days', '3_days', '5_days', '1_week', '2_weeks', '1_month', 'custom'];
+    const validTypes = ['1_minute', '2_minutes', '5_minutes', '10_minutes', '30_minutes', '1_hour', '1_day', '2_days', '3_days', '5_days', '1_week', '2_weeks', '1_month', 'custom'];
     if (step.data?.type && !validTypes.includes(step.data.type)) {
       errors.push(`Invalid delay type: ${step.data.type}. Must be one of: ${validTypes.join(', ')}`);
     }
@@ -141,6 +141,11 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
     } else {
       // Handle frontend delay type mappings
       const delayMap = {
+        '1_minute': 1/60,
+        '2_minutes': 2/60,
+        '5_minutes': 5/60,
+        '10_minutes': 10/60,
+        '30_minutes': 30/60,
         '1_hour': 1,
         '1_day': 24,
         '2_days': 48,
@@ -153,6 +158,9 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
 
       delayHours = delayMap[delayData.type] || delayData.hours || 24;
       delayType = 'fixed';
+
+      // Debug logging
+      console.log(`🔧 Delay Executor Debug: type=${delayData.type}, delayHours=${delayHours}, delayMap[type]=${delayMap[delayData.type]}`);
     }
 
     return { delayHours, delayType };
