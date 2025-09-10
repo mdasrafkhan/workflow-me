@@ -32,10 +32,7 @@ export class ActionService {
     const startTime = Date.now();
     const { actionType, actionName, actionDetails, userData, metadata } = context;
 
-    this.logger.log(`Executing action: ${actionType} - ${actionName}`);
-    this.logger.debug(`Action details: ${JSON.stringify(actionDetails)}`);
-    this.logger.debug(`User data: ${JSON.stringify(userData)}`);
-    this.logger.debug(`Metadata: ${JSON.stringify(metadata)}`);
+    this.logger.log(`[Workflow: ${metadata?.workflowId || 'unknown'}] [Step: ${actionName}] [action:${actionType}] [userId:${userData?.userId || userData?.user?.id || 'unknown'}]`);
 
     try {
       let result: any;
@@ -70,7 +67,7 @@ export class ActionService {
 
       const executionTime = Date.now() - startTime;
 
-      this.logger.log(`Action ${actionType} - ${actionName} executed successfully in ${executionTime}ms`);
+      // Action completed - no need to log success
 
       return {
         success: true,
@@ -107,11 +104,7 @@ export class ActionService {
     metadata: any,
     context?: any
   ): Promise<any> {
-    this.logger.log(`📧 [SEND MAIL ACTION] Executing send email action: ${actionName}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] Email details: ${JSON.stringify(actionDetails, null, 2)}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] User data: ${JSON.stringify(userData, null, 2)}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] Metadata: ${JSON.stringify(metadata, null, 2)}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] Context: ${JSON.stringify(context, null, 2)}`);
+    this.logger.log(`[Workflow: ${metadata?.workflowId || 'unknown'}] [Step: ${actionName}] [action:send_email] [template:${actionDetails?.templateId || 'unknown'}] [subject:${actionDetails?.subject || 'unknown'}]`);
 
     const {
       template,
@@ -151,10 +144,7 @@ export class ActionService {
       }
     };
 
-    this.logger.log(`📧 [SEND MAIL ACTION] Sending email via EmailService: ${finalTemplate} to ${finalTo}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] Subject: ${subject}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] Template ID: ${templateId}`);
-    this.logger.log(`📧 [SEND MAIL ACTION] Execution ID: ${context?.executionId || 'unknown'}`);
+    this.logger.log(`[Workflow: ${metadata?.workflowId || 'unknown'}] [Step: ${actionName}] [action:send_email] [status:sending] [to:${finalTo}] [template:${finalTemplate}]`);
 
     // Call the actual email service with execution context
     const emailResult = await this.emailService.sendEmail({
@@ -163,7 +153,7 @@ export class ActionService {
       stepId: context?.currentStep || 'unknown'
     });
 
-    this.logger.log(`📧 [SEND MAIL ACTION] Email sent successfully: ${JSON.stringify(emailResult, null, 2)}`);
+    this.logger.log(`[Workflow: ${metadata?.workflowId || 'unknown'}] [Step: ${actionName}] [action:send_email] [status:success] [messageId:${emailResult?.messageId || 'unknown'}]`);
 
     return {
       action: 'send_email',
@@ -201,7 +191,7 @@ export class ActionService {
     }
 
     // In a real implementation, this would update user data in the database
-    this.logger.log(`Would update user ${userData.id} with fields: ${JSON.stringify(fields)}`);
+    this.logger.log(`Would update user ${userData.id} with ${Object.keys(fields).length} fields`);
 
     return {
       action: 'update_user',

@@ -421,7 +421,7 @@ export class WorkflowActionService {
       loggedAt: new Date()
     };
 
-    this.logger.log(`[MOCK] Activity logged:`, activityResult);
+    this.logger.log(`[MOCK] Activity logged: userId=${activityResult.userId}, activity=${activityResult.activity}`);
 
     return {
       success: true,

@@ -21,7 +21,7 @@ export class SharedFlowService {
     context: WorkflowExecutionContext,
     executionId: string
   ): Promise<ActionExecutionResult> {
-    this.logger.log(`Executing shared flow: ${flowName} for execution: ${executionId}`);
+    this.logger.log(`[Workflow: ${context.workflowId || 'unknown'}] [Step: shared-flow] [flow:${flowName}] [userId:${context.userId}]`);
 
     try {
       switch (flowName) {
@@ -60,7 +60,7 @@ export class SharedFlowService {
     context: WorkflowExecutionContext,
     executionId: string
   ): Promise<ActionExecutionResult> {
-    this.logger.log(`Executing Welcome Follow-up Flow for user: ${context.metadata.userEmail}`);
+    this.logger.log(`[Workflow: ${context.workflowId || 'unknown'}] [Step: shared-flow] [flow:Welcome Follow-up Flow] [userId:${context.userId}] [userEmail:${context.metadata?.userEmail || 'unknown'}]`);
 
     // This is a placeholder for shared flow logic
     // In a real implementation, this would contain common steps like:
@@ -89,7 +89,7 @@ export class SharedFlowService {
     // Update execution with shared flow data
     await this.updateExecutionWithSharedFlowData(executionId, sharedFlowData);
 
-    this.logger.log(`Welcome Follow-up Flow completed for user: ${context.metadata.userEmail}`);
+    this.logger.log(`[Workflow: ${context.workflowId || 'unknown'}] [Step: shared-flow] [flow:Welcome Follow-up Flow] [status:completed] [userId:${context.userId}]`);
 
     return {
       success: true,

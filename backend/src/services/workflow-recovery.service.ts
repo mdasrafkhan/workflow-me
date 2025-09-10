@@ -4,6 +4,7 @@ import { Repository, LessThan } from 'typeorm';
 import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../database/entities/workflow-delay.entity';
 import { WorkflowExecutionContext } from '../workflow/types';
+import { WorkflowOrchestrationEngine } from '../workflow/execution/workflow-orchestration-engine';
 
 @Injectable()
 export class WorkflowRecoveryService {
@@ -14,6 +15,7 @@ export class WorkflowRecoveryService {
     private readonly executionRepository: Repository<WorkflowExecution>,
     @InjectRepository(WorkflowDelay)
     private readonly delayRepository: Repository<WorkflowDelay>,
+    private readonly orchestrationEngine: WorkflowOrchestrationEngine
   ) {}
 
   /**
@@ -70,7 +72,18 @@ export class WorkflowRecoveryService {
         }
       }
 
-      // 3. Mark stale workflows as failed
+      // 3. Clean up old failed delays (older than 24 hours)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const deletedFailedDelays = await this.delayRepository.delete({
+        status: 'failed',
+        executedAt: LessThan(oneDayAgo)
+      });
+
+      if (deletedFailedDelays.affected > 0) {
+        results.details.push(`Cleaned up ${deletedFailedDelays.affected} old failed delays`);
+      }
+
+      // 4. Mark stale workflows as failed
       const staleWorkflows = await this.executionRepository.find({
         where: {
           status: 'running',
@@ -145,39 +158,22 @@ export class WorkflowRecoveryService {
   private async recoverDelayedWorkflow(delay: WorkflowDelay): Promise<void> {
     this.logger.log(`Recovering delayed workflow: ${delay.executionId}`);
 
-    // Mark the delay as executed
-    await this.delayRepository.update(delay.id, {
-      status: 'executed',
-      executedAt: new Date(),
-      error: 'Recovered after system restart'
-    });
+    // Instead of just marking as executed, actually process the delay
+    // This will resume the workflow properly
+    try {
+      await this.orchestrationEngine.resumeWorkflowFromDelay(delay);
+      this.logger.log(`Successfully recovered delayed workflow: ${delay.executionId}`);
+    } catch (error) {
+      this.logger.error(`Failed to recover delayed workflow ${delay.executionId}:`, error);
 
-    // Update the execution status to running so it can be processed
-    const updatedState = {
-      ...delay.context,
-      recovery: {
-        lastRecoveryAt: new Date(),
-        recoveredAt: new Date(),
-        recoveryCount: (delay.context.recovery?.recoveryCount || 0) + 1
-      }
-    };
-
-    const updatedMetadata = {
-      ...(delay.context.metadata || {}),
-      recoveryReason: 'delayed_execution_recovery',
-      delayId: delay.id
-    };
-
-    await this.executionRepository
-      .createQueryBuilder()
-      .update(WorkflowExecution)
-      .set({
-        status: 'running',
-        state: () => `'${JSON.stringify(updatedState)}'`,
-        metadata: () => `'${JSON.stringify(updatedMetadata)}'`
-      })
-      .where('executionId = :executionId', { executionId: delay.executionId })
-      .execute();
+      // Mark as failed if recovery fails
+      await this.delayRepository.update(delay.id, {
+        status: 'failed',
+        executedAt: new Date(),
+        error: `Recovery failed: ${error.message}`
+      });
+      throw error;
+    }
   }
 
   /**

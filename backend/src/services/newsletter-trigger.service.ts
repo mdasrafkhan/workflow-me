@@ -23,8 +23,6 @@ export class NewsletterTriggerService {
     // Use provided lastRunTime or fall back to 1 hour ago
     const cutoff = lastRunTime || new Date(Date.now() - 60 * 60 * 1000);
 
-    this.logger.log(`Retrieving newsletter triggers since ${cutoff.toISOString()}`);
-
     const newsletters = await this.newsletterRepository
       .createQueryBuilder('newsletter')
       .leftJoinAndSelect('newsletter.user', 'user')
@@ -34,7 +32,10 @@ export class NewsletterTriggerService {
       .orderBy('newsletter.subscribedAt', 'ASC')
       .getMany();
 
-    this.logger.log(`Found ${newsletters.length} new newsletter subscriptions to process`);
+    // Only log when newsletters are found
+    if (newsletters.length > 0) {
+      this.logger.log(`Found ${newsletters.length} new newsletter subscriptions to process since ${cutoff.toISOString()}`);
+    }
 
     return newsletters.map(newsletter => ({
       id: newsletter.id,

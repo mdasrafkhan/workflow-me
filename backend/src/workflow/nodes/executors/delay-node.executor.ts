@@ -37,8 +37,6 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
     context: WorkflowExecutionContext,
     execution: WorkflowExecution
   ): Promise<ExecutionResult> {
-    this.logExecutionStart(step, context);
-
     try {
       const delayData = step.data;
       const scheduledAt = new Date();
@@ -48,6 +46,32 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
 
       // Calculate execution time
       const executeAt = new Date(scheduledAt.getTime() + (delayHours * 60 * 60 * 1000));
+
+      // Check if delay already exists for this execution and step
+      const existingDelay = await this.delayRepository.findOne({
+        where: {
+          executionId: execution.executionId,
+          stepId: step.id,
+          status: 'pending'
+        }
+      });
+
+      if (existingDelay) {
+        this.logger.warn(`Delay already exists for execution ${execution.executionId} step ${step.id}, skipping creation`);
+        return this.createSuccessResult(
+          {
+            delayId: existingDelay.id,
+            delayHours,
+            executeAt: existingDelay.executeAt.toISOString(),
+            status: 'pending'
+          },
+          undefined,
+          {
+            workflowSuspended: true,
+            resumeAt: existingDelay.executeAt.toISOString()
+          }
+        );
+      }
 
       // Save delay to database
       const delayRecord = this.delayRepository.create({
@@ -69,7 +93,7 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
 
       await this.delayRepository.save(delayRecord);
 
-      this.logger.log(`Delay scheduled: ${delayHours} hours for execution ${execution.id}, resume at ${executeAt.toISOString()}`);
+      this.logger.log(`[Workflow: ${context.workflowId || 'unknown'}] [Step: ${step.id}] [type:delay] [delay:${delayHours}h] [resume:${executeAt.toISOString()}] [userId:${context.userId}]`);
 
       const result = this.createSuccessResult(
         {

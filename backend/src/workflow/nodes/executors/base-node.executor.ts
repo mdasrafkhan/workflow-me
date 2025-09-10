@@ -96,8 +96,7 @@ export abstract class BaseNodeExecutor implements NodeExecutor {
    * Helper method to log execution start
    */
   protected logExecutionStart(step: WorkflowStep, context: WorkflowExecutionContext): void {
-    this.logger.debug(`Starting execution of ${this.getNodeType()} node: ${step.id}`);
-    this.logger.debug(`Context data: ${JSON.stringify(context.data)}`);
+    this.logger.log(`[Workflow: ${context.metadata?.workflowId || 'unknown'}] [Step: ${step.id}] [type:${this.getNodeType()}] [userId:${context.metadata?.userId || 'unknown'}]`);
   }
 
   /**
@@ -105,7 +104,7 @@ export abstract class BaseNodeExecutor implements NodeExecutor {
    */
   protected logExecutionEnd(step: WorkflowStep, result: ExecutionResult): void {
     if (result.success) {
-      this.logger.debug(`Successfully executed ${this.getNodeType()} node: ${step.id}`);
+      // Node executed successfully - no need to log
     } else {
       this.logger.error(`Failed to execute ${this.getNodeType()} node: ${step.id} - ${result.error}`);
     }

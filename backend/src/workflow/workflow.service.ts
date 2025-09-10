@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, LessThanOrEqual } from 'typeorm';
+import { Repository, MoreThan, LessThanOrEqual, LessThan } from 'typeorm';
 import { VisualWorkflow } from './visual-workflow.entity';
 import { JsonLogicRule } from './json-logic-rule.entity';
 import { WorkflowExecution } from '../database/entities/workflow-execution.entity';
@@ -193,6 +193,10 @@ export class WorkflowService {
     console.log(`Processing delayed executions ready at ${now.toISOString()}`);
 
     try {
+      // First, let's see how many total delays exist
+      const totalDelays = await this.delayRepo.count();
+      console.log(`Total delays in database: ${totalDelays}`);
+
       // Query the database for pending delays where executeAt <= now
       const readyDelays = await this.delayRepo.find({
         where: {
@@ -206,9 +210,25 @@ export class WorkflowService {
 
       console.log(`Found ${readyDelays.length} delayed executions ready to process`);
 
+      // Also check for overdue delays
+      const overdueDelays = await this.delayRepo.find({
+        where: {
+          status: 'pending',
+          executeAt: LessThan(now)
+        }
+      });
+      console.log(`Found ${overdueDelays.length} overdue delays`);
+
+      // Clean up old executed delays (older than 1 hour)
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      await this.delayRepo.delete({
+        status: 'executed',
+        executedAt: LessThan(oneHourAgo)
+      });
+
       for (const delay of readyDelays) {
         try {
-          console.log(`Processing delayed execution: ${delay.executionId}`);
+          console.log(`Processing delayed execution: ${delay.executionId} (delayId: ${delay.id}, executeAt: ${delay.executeAt.toISOString()})`);
 
           // Get the workflow execution
           const execution = await this.executionRepo.findOne({
@@ -217,11 +237,25 @@ export class WorkflowService {
 
           if (!execution) {
             console.error(`Workflow execution not found: ${delay.executionId}`);
+            // Mark delay as failed since execution doesn't exist
+            await this.delayRepo.update(delay.id, {
+              status: 'failed',
+              executedAt: new Date(),
+              error: 'Workflow execution not found'
+            });
             continue;
           }
 
+          console.log(`Found execution for delay ${delay.id}, resuming workflow...`);
+
           // Resume the workflow from the delay step
           await this.workflowOrchestrationEngine.resumeWorkflowFromDelay(delay);
+
+          // Mark delay as executed
+          await this.delayRepo.update(delay.id, {
+            status: 'executed',
+            executedAt: new Date()
+          });
 
           console.log(`Successfully processed delayed execution: ${delay.executionId}`);
         } catch (error) {

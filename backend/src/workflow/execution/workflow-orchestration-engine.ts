@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository, LessThan, Not } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { WorkflowExecution } from '../../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
@@ -123,12 +123,26 @@ export class WorkflowOrchestrationEngine {
     workflow: WorkflowDefinition,
     context: WorkflowExecutionContext
   ): Promise<WorkflowExecutionResult> {
-    this.logger.log(`🚀 Starting workflow execution: ${workflow.name} (${workflow.id})`);
-    this.logger.log(`📋 Workflow has ${workflow.steps?.length || 0} steps`);
-    this.logger.log(`👤 User ID: ${context.userId}`);
-    this.logger.log(`🔧 Context data:`, JSON.stringify(context.data, null, 2));
+    this.logger.log(`[Workflow: ${workflow.name || workflow.id}] [Step: start] [userId:${context.userId}] [steps:${workflow.steps?.length || 0}]`);
+
+    // Check for existing execution to prevent duplicates
+    const existingExecution = await this.findExistingExecution(workflow.id, context.userId, context.triggerType, context.triggerId);
+    if (existingExecution) {
+      this.logger.warn(`[Workflow: ${workflow.name || workflow.id}] [Step: duplicate-prevention] [userId:${context.userId}] [existingExecutionId:${existingExecution.id}] - Skipping duplicate execution`);
+      return {
+        executionId: existingExecution.executionId,
+        workflowId: workflow.id,
+        success: true,
+        result: { message: 'Duplicate execution prevented' },
+        error: null,
+        executionTime: 0,
+        steps: [],
+        timestamp: new Date()
+      };
+    }
+
     const executionId = this.generateExecutionId();
-    this.logger.log(`Starting workflow execution: ${executionId} for workflow: ${workflow.id}`);
+    this.logger.log(`[Workflow: ${workflow.name || workflow.id}] [Step: executing] [executionId:${executionId}] [userId:${context.userId}]`);
 
     try {
       // Create execution record
@@ -140,7 +154,7 @@ export class WorkflowOrchestrationEngine {
       // Update execution status
       await this.updateExecutionStatus(execution, result);
 
-      this.logger.log(`Workflow execution completed: ${executionId} - Success: ${result.success}`);
+      this.logger.log(`[Workflow: ${workflow.name || workflow.id}] [Step: complete] [executionId:${executionId}] [status:${result.success ? 'success' : 'failed'}] [userId:${context.userId}]`);
 
       return {
         executionId,
@@ -198,9 +212,22 @@ export class WorkflowOrchestrationEngine {
     const completedSteps: string[] = [];
     let currentStepIndex = 0;
 
+    // Ensure context has proper workflow and user information
+    const enrichedContext = {
+      ...context,
+      workflowId: execution.workflowId,
+      userId: execution.userId,
+      metadata: {
+        ...context.metadata,
+        workflowId: execution.workflowId,
+        userId: execution.userId,
+        executionId: execution.executionId
+      }
+    };
+
     while (currentStepIndex < steps.length) {
       const step = steps[currentStepIndex];
-      this.logger.log(`🔄 EXECUTING STEP ${currentStepIndex + 1}/${steps.length}: ${step.type} (${step.id})`);
+      this.logger.log(`[Workflow: ${workflow.name || workflow.id}] [Step: ${step.id}] [type:${step.type}] [${currentStepIndex + 1}/${steps.length}] [userId:${enrichedContext.userId}]`);
 
       try {
         // Get executor for this step type
@@ -217,7 +244,7 @@ export class WorkflowOrchestrationEngine {
         }
 
         // Execute step using node executor (business logic handled there)
-        const stepResult = await executor.execute(step, context, execution);
+        const stepResult = await executor.execute(step, enrichedContext, execution);
 
         if (!stepResult.success) {
           throw new Error(`Step execution failed: ${stepResult.error}`);
@@ -225,7 +252,10 @@ export class WorkflowOrchestrationEngine {
 
         // Record completed step
         completedSteps.push(step.id);
-        this.logger.debug(`Step completed successfully: ${step.id}`);
+        // Step completed successfully - no need to log
+
+        // Update current step in execution record
+        execution.currentStep = step.id;
 
         // Save execution state to database after each step
         const executionState = (execution as any).state;
@@ -361,7 +391,7 @@ export class WorkflowOrchestrationEngine {
           ...delay.context.data
         };
       }
-      this.logger.log(`Restored context from delay record: ${JSON.stringify(delay.context, null, 2)}`);
+      this.logger.log(`[Workflow: ${delay.context?.workflowId || 'unknown'}] [Step: resume] [delayId:${delay.id}] [userId:${delay.context?.userId || 'unknown'}]`);
     }
 
     // Ensure triggerId is set from the original execution
@@ -396,7 +426,7 @@ export class WorkflowOrchestrationEngine {
           ...executionState.context.data,
           ...userData
         };
-        this.logger.log(`Restored context data from delay: ${JSON.stringify(executionState.context.data, null, 2)}`);
+        this.logger.log(`[Workflow: ${execution.workflowId}] [Step: context-restore] [executionId:${execution.id}] [userId:${executionState.context.data?.userId || 'unknown'}]`);
       }
     }
 
@@ -438,6 +468,7 @@ export class WorkflowOrchestrationEngine {
     if (remainingSteps.length === 0) {
       this.logger.log(`All steps completed for execution ${execution.id}`);
       execution.status = 'completed';
+      execution.currentStep = 'end';
       await this.executionRepository.save(execution);
       return;
     }
@@ -477,7 +508,7 @@ export class WorkflowOrchestrationEngine {
     // Mark execution as completed
     execution.status = 'completed';
     await this.executionRepository.save(execution);
-    this.logger.log(`Workflow execution ${execution.id} completed successfully`);
+    this.logger.log(`[Workflow: ${execution.workflowId}] [Step: finalize] [executionId:${execution.id}] [status:success]`);
   }
 
   /**
@@ -487,6 +518,19 @@ export class WorkflowOrchestrationEngine {
     try {
       this.logger.log(`Executing step: ${step.id} (${step.type})`);
 
+      // Ensure context has proper workflow and user information
+      const enrichedContext = {
+        ...context,
+        workflowId: execution.workflowId,
+        userId: execution.userId,
+        metadata: {
+          ...context.metadata,
+          workflowId: execution.workflowId,
+          userId: execution.userId,
+          executionId: execution.executionId
+        }
+      };
+
       // Get the appropriate node executor
       const executor = this.nodeRegistry.getExecutor(step.type);
       if (!executor) {
@@ -494,7 +538,7 @@ export class WorkflowOrchestrationEngine {
       }
 
       // Execute the step
-      const result = await executor.execute(step, context, execution);
+      const result = await executor.execute(step, enrichedContext, execution);
 
       // Update execution history
       const executionState = (execution as any).state;
@@ -526,6 +570,33 @@ export class WorkflowOrchestrationEngine {
   // UTILITY METHODS (No Business Logic)
   // ============================================================================
 
+  private async findExistingExecution(
+    workflowId: string,
+    userId: string,
+    triggerType: string,
+    triggerId: string
+  ): Promise<WorkflowExecution | null> {
+    try {
+      const execution = await this.executionRepository.findOne({
+        where: {
+          workflowId,
+          userId,
+          triggerType,
+          triggerId,
+          status: Not('completed') // Only prevent if execution is not completed
+        },
+        order: {
+          createdAt: 'DESC'
+        }
+      });
+
+      return execution;
+    } catch (error) {
+      this.logger.error(`Error finding existing execution: ${error.message}`);
+      return null;
+    }
+  }
+
   private async createExecutionRecord(
     executionId: string,
     workflowId: string,
@@ -553,6 +624,7 @@ export class WorkflowOrchestrationEngine {
 
   private async updateExecutionStatus(execution: WorkflowExecution, result: ExecutionResult): Promise<void> {
     execution.status = result.success ? 'completed' : 'failed';
+    execution.currentStep = result.success ? 'end' : 'failed';
     execution.state.history.push({
       stepId: 'final',
       state: result.success ? 'completed' : 'failed',

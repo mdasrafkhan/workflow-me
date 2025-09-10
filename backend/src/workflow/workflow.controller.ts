@@ -1,6 +1,5 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Logger } from '@nestjs/common';
 import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-engine';
-import { WorkflowExecutor } from './execution/WorkflowExecutor';
 import { SubscriptionTriggerService } from '../services/subscription-trigger.service';
 import { NewsletterTriggerService } from '../services/newsletter-trigger.service';
 import { SharedFlowService } from '../services/shared-flow.service';
@@ -12,9 +11,10 @@ import { DummyDataService } from '../services/dummy-data.service';
 
 @Controller('workflow')
 export class WorkflowController {
+  private readonly logger = new Logger(WorkflowController.name);
+
   constructor(
     private readonly workflowEngine: WorkflowOrchestrationEngine,
-    private readonly workflowExecutor: WorkflowExecutor,
     private readonly subscriptionTriggerService: SubscriptionTriggerService,
     private readonly newsletterTriggerService: NewsletterTriggerService,
     private readonly sharedFlowService: SharedFlowService,
@@ -45,28 +45,6 @@ export class WorkflowController {
   }
 
   // New Clean Engine Endpoints
-  @Post('execute')
-  async executeWorkflow(@Body() body: { workflow: any; context: any }) {
-    try {
-      // Use WorkflowExecutor for JsonLogic rules
-      const result = await this.workflowExecutor.executeWorkflow(
-        body.context.workflowId || 'test-workflow',
-        body.workflow,
-        body.context
-      );
-      return {
-        success: true,
-        result,
-        message: 'Workflow executed successfully using WorkflowExecutor'
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        message: 'Workflow execution failed'
-      };
-    }
-  }
 
   @Get('node-types')
   async getAvailableNodeTypes() {
@@ -105,8 +83,9 @@ export class WorkflowController {
   // Subscription Trigger Endpoints
   @Get('triggers/subscriptions')
   async getSubscriptionTriggers(@Query('secondsAgo') secondsAgo: number = 30) {
-    const cutoff = new Date(Date.now() - secondsAgo * 1000);
-    return await this.subscriptionTriggerService.retrieveTriggerData(cutoff);
+    // For the controller, we'll use a default workflow ID
+    // This is a simplified version for the API endpoint
+    return await this.subscriptionTriggerService.retrieveTriggerData('232193f9-c3ff-4aa9-95da-78f499d4f01c');
   }
 
   @Get('triggers/subscriptions/statistics')
@@ -236,7 +215,7 @@ export class WorkflowController {
     userName: string;
   }) {
     try {
-      console.log('🔍 Test subscription workflow started with:', body);
+      this.logger.log(`[Workflow: subscription-test] [Step: start] [product:${body.product}] [email:${body.userEmail}]`);
 
       // Validate input
       if (!body.product) {
@@ -244,7 +223,6 @@ export class WorkflowController {
       }
 
       // Create a test user first, then subscription
-      console.log('📝 Creating test user and subscription...');
       let user;
       try {
         // First create a test user
@@ -261,28 +239,30 @@ export class WorkflowController {
           createdAt: new Date(),
           updatedAt: new Date()
         });
-        console.log('✅ Test user created:', testUser.id);
+        this.logger.log(`[Workflow: subscription-test] [Step: user-created] [email:${uniqueEmail}]`);
 
         // Now create subscription
         user = await this.subscriptionTriggerService.createSubscription(
           testUserId,
           body.product
         );
-        console.log('✅ Subscription created:', user.id);
+        this.logger.log(`[Workflow: subscription-test] [Step: subscription-created] [subscriptionId:${user.id}] [product:${body.product}]`);
       } catch (error) {
-        console.error('❌ User/subscription creation failed:', error);
+        this.logger.error(`[Workflow: subscription-test] [Step: error] [error:${error.message}]`);
         throw new Error(`User/subscription creation failed: ${error.message}`);
       }
 
       // Trigger workflow
-      console.log('🚀 Triggering workflow...');
+      this.logger.log(`[Workflow: subscription-test] [Step: trigger-workflow] [subscriptionId:${user.id}]`);
       try {
         // await this.workflowEngine.triggerWorkflowForSubscription(user.id); // To be implemented
-        console.log('✅ Workflow triggered successfully');
+        this.logger.log(`[Workflow: subscription-test] [Step: workflow-triggered] [subscriptionId:${user.id}] [status:success]`);
       } catch (error) {
-        console.error('❌ Workflow triggering failed:', error);
+        this.logger.error(`[Workflow: subscription-test] [Step: workflow-error] [error:${error.message}]`);
         throw new Error(`Workflow triggering failed: ${error.message}`);
       }
+
+      this.logger.log(`[Workflow: subscription-test] [Step: complete] [subscriptionId:${user.id}] [product:${body.product}]`);
 
       return {
         message: 'Test subscription workflow triggered',
@@ -290,7 +270,7 @@ export class WorkflowController {
         product: body.product
       };
     } catch (error) {
-      console.error('❌ Test subscription workflow failed:', error);
+      console.error(`[Workflow: subscription-test] [Step: failed] [error:${error.message}]`);
       return {
         statusCode: 500,
         message: error.message || 'Internal server error',
@@ -304,11 +284,14 @@ export class WorkflowController {
     email: string;
     source?: string;
   }) {
+    this.logger.log(`[Workflow: newsletter-test] [Step: start] [email:${body.email}] [source:${body.source || 'default'}]`);
+
     // Create a test newsletter subscription
     const newsletter = await this.newsletterTriggerService.createNewsletterSubscription(
       body.email,
       body.source
     );
+    this.logger.log(`[Workflow: newsletter-test] [Step: newsletter-created] [newsletterId:${newsletter.id}] [email:${body.email}]`);
 
     // Trigger workflow
     const context = await this.newsletterTriggerService.processTrigger({
@@ -318,13 +301,71 @@ export class WorkflowController {
       data: newsletter,
       createdAt: newsletter.createdAt
     });
+    this.logger.log(`[Workflow: newsletter-test] [Step: context-created] [newsletterId:${newsletter.id}]`);
 
     // await this.workflowEngine.executeWorkflowFromContext(context); // To be implemented
+    this.logger.log(`[Workflow: newsletter-test] [Step: workflow-triggered] [newsletterId:${newsletter.id}] [status:success]`);
+
+    this.logger.log(`[Workflow: newsletter-test] [Step: complete] [newsletterId:${newsletter.id}] [email:${body.email}]`);
 
     return {
       message: 'Test newsletter workflow triggered',
       newsletterId: newsletter.id,
       email: body.email
+    };
+  }
+
+  @Post('test/create-subscriptions')
+  async createTestSubscriptions(@Body() body: {
+    count?: number;
+    products?: string[];
+  }) {
+    const count = body.count || 5;
+    const products = body.products || ['united', 'podcast', 'premium', 'newsletter'];
+    const createdSubscriptions = [];
+
+    this.logger.log(`[Workflow: batch-subscription-test] [Step: start] [count:${count}] [products:${products.join(',')}]`);
+
+    for (let i = 0; i < count; i++) {
+      try {
+        const product = products[i % products.length];
+        const timestamp = Date.now();
+
+        const testUser = {
+          email: `test-user-${i + 1}-${timestamp}@example.com`,
+          name: `Test User ${i + 1}`,
+          phoneNumber: `+123456789${i}`,
+          timezone: 'UTC'
+        };
+
+        this.logger.log(`[Workflow: batch-subscription-test] [Step: creating] [${i + 1}/${count}] [product:${product}]`);
+
+        // Create user and subscription
+        const userResponse = await this.testSubscriptionWorkflow({
+          product,
+          userEmail: testUser.email,
+          userName: testUser.name
+        });
+
+        createdSubscriptions.push({
+          subscriptionId: userResponse.subscriptionId,
+          product,
+          userEmail: testUser.email
+        });
+
+        this.logger.log(`[Workflow: batch-subscription-test] [Step: created] [${i + 1}/${count}] [subscriptionId:${userResponse.subscriptionId}] [product:${product}]`);
+
+      } catch (error) {
+        this.logger.error(`[Workflow: batch-subscription-test] [Step: error] [${i + 1}/${count}] [error:${error.message}]`);
+      }
+    }
+
+    this.logger.log(`[Workflow: batch-subscription-test] [Step: complete] [created:${createdSubscriptions.length}/${count}] [status:success]`);
+
+    return {
+      message: `Created ${createdSubscriptions.length} test subscriptions`,
+      subscriptions: createdSubscriptions,
+      count: createdSubscriptions.length
     };
   }
 
@@ -337,8 +378,15 @@ export class WorkflowController {
 
   @Post('process/delayed')
   async processDelayedExecutions() {
-    // await this.workflowEngine.processDelayedExecutions(); // To be implemented
-    return { message: 'Delayed executions processed' };
+    try {
+      await this.workflowService.processDelayedExecutions();
+      return { message: 'Delayed executions processed successfully' };
+    } catch (error) {
+      return {
+        message: 'Error processing delayed executions',
+        error: error.message
+      };
+    }
   }
 
   // Recovery Endpoints

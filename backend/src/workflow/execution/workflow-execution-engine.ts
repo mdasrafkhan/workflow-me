@@ -59,6 +59,7 @@ export class WorkflowExecutionEngine {
 
       // Update execution status
       execution.status = result.success ? 'completed' : 'failed';
+      execution.currentStep = result.success ? 'end' : 'failed';
       execution.state.history.push({
         stepId: 'final',
         state: result.success ? 'completed' : 'failed',
@@ -129,6 +130,10 @@ export class WorkflowExecutionEngine {
         // Record completed step
         completedSteps.push(step.id);
         this.logger.debug(`Step completed successfully: ${step.id}`);
+
+        // Update current step in execution record
+        execution.currentStep = step.id;
+        await this.executionRepository.save(execution);
 
         // Determine next step
         if (stepResult.nextSteps && stepResult.nextSteps.length > 0) {

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { DummySubscription } from '../database/entities/dummy-subscription.entity';
 import { DummyUser } from '../database/entities/dummy-user.entity';
 import { DummySubscriptionType } from '../database/entities/dummy-subscription-type.entity';
+import { WorkflowExecutionSchedule } from '../database/entities/workflow-execution-schedule.entity';
 import { WorkflowExecutionContext, TriggerData } from '../workflow/types';
 
 @Injectable()
@@ -17,16 +18,32 @@ export class SubscriptionTriggerService {
     private readonly userRepository: Repository<DummyUser>,
     @InjectRepository(DummySubscriptionType)
     private readonly subscriptionTypeRepository: Repository<DummySubscriptionType>,
+    @InjectRepository(WorkflowExecutionSchedule)
+    private readonly executionScheduleRepository: Repository<WorkflowExecutionSchedule>,
   ) {}
 
   /**
    * Retrieve all new subscriptions that need workflow processing
    */
-  async retrieveTriggerData(lastRunTime?: Date): Promise<TriggerData[]> {
-    // Use provided lastRunTime or fall back to 1 hour ago
-    const cutoff = lastRunTime || new Date(Date.now() - 60 * 60 * 1000);
+  async retrieveTriggerData(workflowId: string): Promise<TriggerData[]> {
+    const triggerType = 'user_buys_subscription';
 
-    this.logger.log(`Retrieving subscription triggers since ${cutoff.toISOString()}`);
+    // Get or create execution schedule record for this specific workflow
+    let executionSchedule = await this.executionScheduleRepository.findOne({
+      where: { workflowId, triggerType }
+    });
+
+    if (!executionSchedule) {
+      // First run for this workflow - process subscriptions from 1 hour ago
+      executionSchedule = this.executionScheduleRepository.create({
+        workflowId,
+        triggerType,
+        lastExecutionTime: new Date(Date.now() - 60 * 60 * 1000)
+      });
+      await this.executionScheduleRepository.save(executionSchedule);
+    }
+
+    const cutoff = executionSchedule.lastExecutionTime;
 
     const subscriptions = await this.subscriptionRepository
       .createQueryBuilder('subscription')
@@ -38,7 +55,10 @@ export class SubscriptionTriggerService {
       .orderBy('subscription.createdAt', 'ASC')
       .getMany();
 
-    this.logger.log(`Found ${subscriptions.length} new subscriptions to process`);
+    // Only log when subscriptions are found
+    if (subscriptions.length > 0) {
+      this.logger.log(`Found ${subscriptions.length} new subscriptions to process for workflow ${workflowId} since ${cutoff.toISOString()}`);
+    }
 
     return subscriptions.map(subscription => ({
       id: subscription.id,
@@ -112,6 +132,18 @@ export class SubscriptionTriggerService {
       workflowProcessed: true
     });
     this.logger.log(`Marked subscription ${subscriptionId} as processed`);
+  }
+
+  /**
+   * Update last execution time for subscription workflow processing
+   * This should be called by the caller after all subscriptions are processed successfully
+   */
+  async updateLastExecutionTime(workflowId: string, triggerType: string = 'user_buys_subscription'): Promise<void> {
+    await this.executionScheduleRepository.update(
+      { workflowId, triggerType },
+      { lastExecutionTime: new Date() }
+    );
+    this.logger.log(`Updated last execution time for workflow ${workflowId}`);
   }
 
   /**

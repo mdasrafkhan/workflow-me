@@ -57,7 +57,10 @@ export class ActionNodeExecutor extends BaseNodeExecutor {
         actionName: actionName,
         actionDetails: actionDetails,
         userData: userData,
-        metadata: context.metadata
+        metadata: {
+          ...context.metadata,
+          workflowId: context.metadata?.workflowId
+        }
       };
 
       // Validate action context
@@ -69,7 +72,7 @@ export class ActionNodeExecutor extends BaseNodeExecutor {
       // Execute action using ActionService
       const result = await this.actionService.executeAction(actionContext);
 
-      this.logger.log(`Action executed successfully: ${actionType} - ${actionName}`);
+      // Action completed - no need to log success
 
       const executionResult = this.createSuccessResult(
         result,

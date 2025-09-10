@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkflowOrchestrationEngine } from '../execution/workflow-orchestration-engine';
-import { WorkflowExecutor } from '../execution/WorkflowExecutor';
 import { ActionService } from '../../services/action.service';
 import { EmailService } from '../../services/email.service';
 import { SharedFlowService } from '../../services/shared-flow.service';
@@ -14,13 +13,11 @@ import { NodeRegistryService } from '../nodes/registry/node-registry.service';
 
 describe('Workflow Execution Core Tests', () => {
   let workflowEngine: WorkflowOrchestrationEngine;
-  let workflowExecutor: WorkflowExecutor;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkflowOrchestrationEngine,
-        WorkflowExecutor,
         ActionService,
         EmailService,
         SharedFlowService,
@@ -77,12 +74,10 @@ describe('Workflow Execution Core Tests', () => {
     }).compile();
 
     workflowEngine = module.get<WorkflowOrchestrationEngine>(WorkflowOrchestrationEngine);
-    workflowExecutor = module.get<WorkflowExecutor>(WorkflowExecutor);
   });
 
   it('should be defined', () => {
     expect(workflowEngine).toBeDefined();
-    expect(workflowExecutor).toBeDefined();
   });
 
   it('should have required methods', () => {
@@ -130,7 +125,7 @@ describe('Workflow Execution Core Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](sendEmailRule, context.data, context);
+      const result = await workflowEngine['executeCustomOperations'](sendEmailRule, context.data, context);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -178,7 +173,7 @@ describe('Workflow Execution Core Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](sendEmailRule, context.data, context);
+      const result = await workflowEngine['executeCustomOperations'](sendEmailRule, context.data, context);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -216,7 +211,7 @@ describe('Workflow Execution Core Tests', () => {
         "product_package": "premium"
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](conditionRule, context.data, context);
+      const result = await workflowEngine['executeCustomOperations'](conditionRule, context.data, context);
 
       expect(result).toBe(true);
     });
@@ -249,7 +244,7 @@ describe('Workflow Execution Core Tests', () => {
         "product_package": "premium"
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](conditionRule, context.data, context);
+      const result = await workflowEngine['executeCustomOperations'](conditionRule, context.data, context);
 
       expect(result).toBe(false);
     });

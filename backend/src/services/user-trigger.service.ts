@@ -20,15 +20,16 @@ export class UserTriggerService {
   async retrieveTriggerData(workflowId: string): Promise<TriggerData[]> {
     const triggerType = 'user_created';
 
-    // Get or create execution schedule record for this specific workflow
+    // Use a fixed UUID for global user_created triggers to prevent duplicate processing
+    const globalWorkflowId = '00000000-0000-0000-0000-000000000001';
     let executionSchedule = await this.executionScheduleRepository.findOne({
-      where: { workflowId, triggerType }
+      where: { workflowId: globalWorkflowId, triggerType }
     });
 
     if (!executionSchedule) {
-      // First run for this workflow - process users from 1 hour ago
+      // First run - process users from 1 hour ago
       executionSchedule = this.executionScheduleRepository.create({
-        workflowId,
+        workflowId: globalWorkflowId,
         triggerType,
         lastExecutionTime: new Date(Date.now() - 60 * 60 * 1000)
       });
@@ -36,9 +37,8 @@ export class UserTriggerService {
     }
 
     const cutoff = executionSchedule.lastExecutionTime;
-    this.logger.log(`Retrieving user creation triggers for workflow ${workflowId} since ${cutoff.toISOString()}`);
 
-    // Query users created since last execution for this workflow
+    // Simple query: get all users created after the last execution time
     const users = await this.userRepository
       .createQueryBuilder('user')
       .where('user.createdAt > :cutoff', { cutoff })
@@ -46,7 +46,10 @@ export class UserTriggerService {
       .orderBy('user.createdAt', 'ASC')
       .getMany();
 
-    this.logger.log(`Found ${users.length} new users to process for workflow ${workflowId} since last run`);
+    // Only log when users are found
+    if (users.length > 0) {
+      this.logger.log(`Found ${users.length} new users to process for workflow ${workflowId} since ${cutoff.toISOString()}`);
+    }
 
     // ⚠️ CRITICAL FIX: Only update lastExecutionTime AFTER successful processing
     // This prevents data loss if server crashes during processing
@@ -84,11 +87,14 @@ export class UserTriggerService {
    * This should be called by the caller after all users are processed successfully
    */
   async updateLastExecutionTime(workflowId: string, triggerType: string = 'user_created'): Promise<void> {
+    // For user_created triggers, update the global execution time
+    const globalWorkflowId = triggerType === 'user_created' ? '00000000-0000-0000-0000-000000000001' : workflowId;
+
     await this.executionScheduleRepository.update(
-      { workflowId, triggerType },
+      { workflowId: globalWorkflowId, triggerType },
       { lastExecutionTime: new Date() }
     );
-    this.logger.log(`Updated last execution time for workflow ${workflowId}`);
+    this.logger.log(`Updated last execution time for ${globalWorkflowId} (${triggerType})`);
   }
 
   getLastProcessedTime(): Date | null {

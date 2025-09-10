@@ -286,12 +286,8 @@ export class EmailService {
       const html = template({ subject, ...data });
       const text = this.htmlToText(html);
 
-      // Log email as external service call
-      this.logger.log(`📧 [EXTERNAL EMAIL SERVICE] Sending email to ${to}`);
-      this.logger.log(`   Subject: ${subject}`);
-      this.logger.log(`   Template: ${templateId}`);
-      this.logger.log(`   Execution ID: ${executionId || 'unknown'}`);
-      this.logger.log(`   Step ID: ${stepId || 'unknown'}`);
+      // Log email as external service call (minimal logging)
+      this.logger.log(`📧 Sending email to ${to} [${templateId}]`);
 
       // Send email (or mock in development)
       if (process.env.NODE_ENV === 'production' && this.transporter) {
@@ -305,10 +301,8 @@ export class EmailService {
 
         this.logger.log(`✅ Email sent successfully to ${to}: ${info.messageId}`);
       } else {
-        // Mock mode for development/testing
-        this.logger.log(`[MOCK] Email would be sent to ${to} with subject: ${subject}`);
-        this.logger.log(`[MOCK] Template: ${templateId}`);
-        this.logger.log(`[MOCK] Data:`, data);
+        // Mock mode for development/testing (minimal logging)
+        this.logger.log(`[MOCK] Email sent to ${to} [${templateId}]`);
       }
 
       return {
@@ -319,11 +313,8 @@ export class EmailService {
     } catch (error) {
       this.logger.error(`Failed to send email to ${to}:`, error);
 
-      // Log failed email as external service error
-      this.logger.error(`❌ [EXTERNAL EMAIL SERVICE] Failed to send email to ${to}`);
-      this.logger.error(`   Error: ${error.message}`);
-      this.logger.error(`   Execution ID: ${executionId || 'unknown'}`);
-      this.logger.error(`   Step ID: ${stepId || 'unknown'}`);
+      // Log failed email as external service error (minimal logging)
+      this.logger.error(`❌ Failed to send email to ${to}: ${error.message}`);
 
       return {
         success: false,

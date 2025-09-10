@@ -38,7 +38,7 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
         // Use JsonLogic to evaluate the custom condition
         const jsonLogic = require('json-logic-js');
         conditionResult = jsonLogic.apply(conditionData.condition, context.data);
-        this.logger.log(`Generic condition evaluated with JsonLogic: ${JSON.stringify(conditionData.condition)} = ${conditionResult}`);
+        this.logger.log(`Generic condition evaluated with JsonLogic: result=${conditionResult}`);
       } else {
         // Use structured condition evaluation
         const conditionType = conditionData.conditionType || 'product_package';

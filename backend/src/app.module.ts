@@ -12,8 +12,10 @@ import { WorkflowRecoveryService } from './services/workflow-recovery.service';
 import { WorkflowStateMachineService } from './workflow/state-machine/workflow-state-machine';
 import { HealthController } from './health.controller';
 import { WorkflowController } from './workflow/workflow.controller';
+import { SubscriptionPurchaseController } from './controllers/subscription-purchase.controller';
 import { WorkflowModule } from './workflow/workflow.module';
 import { TestUtilsModule } from './test-utils/test-utils.module';
+import { SubscriptionPurchaseService } from './services/subscription-purchase.service';
 import { DummyUser } from './database/entities/dummy-user.entity';
 import { DummySubscription } from './database/entities/dummy-subscription.entity';
 import { DummySubscriptionType } from './database/entities/dummy-subscription-type.entity';
@@ -69,7 +71,7 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
     WorkflowModule,
     TestUtilsModule
   ],
-  controllers: [HealthController, WorkflowController],
+  controllers: [HealthController, WorkflowController, SubscriptionPurchaseController],
   providers: [
     DummyDataService,
     EmailService,
@@ -78,7 +80,8 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
     SharedFlowService,
     WorkflowActionService,
     WorkflowRecoveryService,
-    WorkflowStateMachineService
+    WorkflowStateMachineService,
+    SubscriptionPurchaseService
   ]
 })
 export class AppModule {}

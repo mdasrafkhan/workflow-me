@@ -5,7 +5,6 @@ import { JsonLogicRule } from './json-logic-rule.entity';
 import { WorkflowService } from './workflow.service';
 import { WorkflowController } from './workflow.controller';
 import { WorkflowCron } from './workflow.cron';
-import { WorkflowExecutor } from './execution/WorkflowExecutor';
 import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-engine';
 import { SubscriptionTriggerService } from '../services/subscription-trigger.service';
 import { NewsletterTriggerService } from '../services/newsletter-trigger.service';
@@ -44,7 +43,6 @@ import { NodesModule } from './nodes/nodes.module';
   providers: [
     WorkflowService,
     WorkflowCron,
-    WorkflowExecutor,
     WorkflowOrchestrationEngine, // Use the new clean engine
     SubscriptionTriggerService,
     NewsletterTriggerService,
@@ -58,6 +56,6 @@ import { NodesModule } from './nodes/nodes.module';
     WorkflowStateMachineService
   ],
   controllers: [WorkflowController],
-  exports: [WorkflowService, WorkflowExecutor, WorkflowOrchestrationEngine],
+  exports: [WorkflowService, WorkflowOrchestrationEngine],
 })
 export class WorkflowModule {}

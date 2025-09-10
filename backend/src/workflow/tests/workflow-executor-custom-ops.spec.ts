@@ -1,19 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { WorkflowExecutor } from '../execution/WorkflowExecutor';
+import { WorkflowOrchestrationEngine } from '../execution/workflow-orchestration-engine';
 import { EmailService } from '../../services/email.service';
 import { ActionService } from '../../services/action.service';
 import { SharedFlowService } from '../../services/shared-flow.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
 
-describe('WorkflowExecutor Custom Operations Tests', () => {
-  let workflowExecutor: WorkflowExecutor;
+describe('WorkflowOrchestrationEngine Custom Operations Tests', () => {
+  let workflowEngine: WorkflowOrchestrationEngine;
   let emailService: EmailService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        WorkflowExecutor,
+        WorkflowOrchestrationEngine,
         {
           provide: ActionService,
           useValue: {
@@ -54,7 +54,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
       ],
     }).compile();
 
-    workflowExecutor = module.get<WorkflowExecutor>(WorkflowExecutor);
+    workflowEngine = module.get<WorkflowOrchestrationEngine>(WorkflowOrchestrationEngine);
     emailService = module.get<EmailService>(EmailService);
   });
 
@@ -88,7 +88,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](sendEmailRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](sendEmailRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -132,7 +132,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](sendEmailRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](sendEmailRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -166,7 +166,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result1 = await workflowExecutor['executeCustomOperations'](incompleteRule1, context.data);
+      const result1 = await workflowEngine['executeCustomOperations'](incompleteRule1, context.data);
       expect(result1.success).toBe(true);
       expect(result1.action).toBe('send_email');
       expect(result1.subject).toBe(undefined); // No subject in rule
@@ -180,7 +180,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result2 = await workflowExecutor['executeCustomOperations'](incompleteRule2, context.data);
+      const result2 = await workflowEngine['executeCustomOperations'](incompleteRule2, context.data);
       expect(result2.success).toBe(true);
       expect(result2.action).toBe('send_email');
       expect(result2.subject).toBe('Test Email');
@@ -194,7 +194,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result3 = await workflowExecutor['executeCustomOperations'](incompleteRule3, context.data);
+      const result3 = await workflowEngine['executeCustomOperations'](incompleteRule3, context.data);
       expect(result3.success).toBe(true);
       expect(result3.action).toBe('send_email');
       expect(result3.subject).toBe('Test Email');
@@ -223,7 +223,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](invalidEmailRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](invalidEmailRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -274,7 +274,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](complexRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](complexRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -318,7 +318,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](arrayRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](arrayRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -349,7 +349,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         "product_package": "premium"
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](productPackageRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](productPackageRule, context.data);
 
       expect(result).toBe(true); // product_package returns boolean comparison result
     });
@@ -375,7 +375,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](unrecognizedRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](unrecognizedRule, context.data);
 
       expect(result).toBeNull();
     });
@@ -401,7 +401,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         "send_email": {}
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](emptyRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](emptyRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -438,7 +438,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](nullRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](nullRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
@@ -476,7 +476,7 @@ describe('WorkflowExecutor Custom Operations Tests', () => {
         }
       };
 
-      const result = await workflowExecutor['executeCustomOperations'](undefinedRule, context.data);
+      const result = await workflowEngine['executeCustomOperations'](undefinedRule, context.data);
 
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
