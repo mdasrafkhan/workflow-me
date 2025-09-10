@@ -34,77 +34,47 @@ The Workflow Management System is built on a microservices architecture with cle
 
 ```mermaid
 graph TB
-    subgraph "Frontend Layer"
-        UI[React Frontend]
-        VWE[Visual Workflow Editor]
-        RF[React Flow]
+    subgraph "User Interface"
+        UI[React Frontend<br/>Visual Workflow Editor]
     end
 
-    subgraph "API Layer"
-        API[NestJS API]
-        WC[Workflow Controller]
-        HC[Health Controller]
+    subgraph "Backend Services"
+        API[NestJS API<br/>Workflow Management]
+        ENGINE[Workflow Engine<br/>Execution & State Management]
+        SCHEDULER[Cron Scheduler<br/>Runs Every 30s]
     end
 
-    subgraph "Business Logic Layer"
-        WOE[Workflow Orchestration Engine]
-        NR[Node Registry]
-        NE[Node Executors]
-        SM[State Machine Service]
+    subgraph "Data Storage"
+        DB[(PostgreSQL<br/>Workflows & Executions)]
+        CACHE[(Redis<br/>Caching)]
     end
 
-    subgraph "Scheduling Layer"
-        CRON[Node-Cron Scheduler]
-        BQ[Bull Queue]
-        DP[Delay Processor]
-    end
-
-    subgraph "Data Layer"
-        PG[(PostgreSQL)]
-        RD[(Redis)]
-        WF[Workflow Storage]
-        EX[Execution Storage]
-        DL[Delay Storage]
-    end
-
-    subgraph "External Services"
+    subgraph "External Actions"
         EMAIL[Email Service]
-        EMAIL_LOG[(Email Logs)]
-        WEBHOOK[Webhook Service]
         SMS[SMS Service]
+        WEBHOOK[Webhook Service]
     end
 
-    UI --> API
-    VWE --> RF
-    API --> WOE
-    WC --> WOE
-    WOE --> NR
-    NR --> NE
-    WOE --> SM
-    CRON --> WOE
-    BQ --> DP
-    DP --> WOE
-    WOE --> PG
-    WOE --> RD
-    NE --> EMAIL
-    EMAIL --> EMAIL_LOG
-    NE --> WEBHOOK
-    NE --> SMS
+    %% Main flow
+    UI -->|Create/Edit Workflows| API
+    API -->|Store Workflows| DB
+    SCHEDULER -->|Process Workflows| ENGINE
+    ENGINE -->|Read/Write Data| DB
+    ENGINE -->|Execute Actions| EMAIL
+    ENGINE -->|Execute Actions| SMS
+    ENGINE -->|Execute Actions| WEBHOOK
+    ENGINE -->|Cache Data| CACHE
 
     %% Styling
-    classDef frontend fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#ffffff
-    classDef api fill:#7c2d12,stroke:#dc2626,stroke-width:2px,color:#ffffff
-    classDef business fill:#2d5a27,stroke:#4a9d4a,stroke-width:2px,color:#ffffff
-    classDef scheduling fill:#7c2d12,stroke:#dc2626,stroke-width:2px,color:#ffffff
-    classDef data fill:#374151,stroke:#6b7280,stroke-width:2px,color:#ffffff
-    classDef external fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#ffffff
+    classDef frontend fill:#3b82f6,stroke:#1e40af,stroke-width:3px,color:#ffffff
+    classDef backend fill:#059669,stroke:#047857,stroke-width:3px,color:#ffffff
+    classDef data fill:#6b7280,stroke:#374151,stroke-width:3px,color:#ffffff
+    classDef external fill:#dc2626,stroke:#b91c1c,stroke-width:3px,color:#ffffff
 
-    class UI,VWE,RF frontend
-    class API,WC,HC api
-    class WOE,NR,NE,SM business
-    class CRON,BQ,DP scheduling
-    class PG,RD,WF,EX,DL,EMAIL_LOG data
-    class EMAIL,WEBHOOK,SMS external
+    class UI frontend
+    class API,ENGINE,SCHEDULER backend
+    class DB,CACHE data
+    class EMAIL,SMS,WEBHOOK external
 ```
 
 ### Workflow Execution Flow
