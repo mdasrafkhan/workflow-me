@@ -33,27 +33,42 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
       const conditionData = step.data;
       let conditionResult: boolean;
 
-      // Check if it's a generic condition with custom JsonLogic rule
-      if (conditionData.condition && typeof conditionData.condition === 'object') {
-        // Use JsonLogic to evaluate the custom condition
-        const jsonLogic = require('json-logic-js');
-        conditionResult = jsonLogic.apply(conditionData.condition, context.data);
-        this.logger.log(`Generic condition evaluated with JsonLogic: result=${conditionResult}`);
+      // Handle if-else structure with JsonLogic
+      if (conditionData.if && Array.isArray(conditionData.if)) {
+        // Find which condition branch matches and extract its actions
+        const matchingBranch = this.findMatchingIfBranch(conditionData.if, context.data);
+
+        if (matchingBranch) {
+          conditionResult = true;
+          this.logger.log(`If-else condition matched branch with actions`);
+
+          // Extract actions from the matching branch to be executed next
+          const actions = this.extractActionsFromBranch(matchingBranch);
+          this.logger.log(`Extracted ${actions.length} actions from matching branch`);
+
+          // Return the actions as the result so they can be executed
+          const result = this.createSuccessResult(
+            {
+              conditionResult: true,
+              matchedBranch: matchingBranch,
+              extractedActions: actions,
+              evaluatedAt: new Date().toISOString()
+            },
+            [], // No next steps - actions will be handled by orchestration engine
+            {
+              conditionPassed: true,
+              actionsToExecute: actions
+            }
+          );
+
+          this.logExecutionEnd(step, result);
+          return result;
+        } else {
+          conditionResult = false;
+          this.logger.log(`If-else condition: no matching branch found`);
+        }
       } else {
-        // Use structured condition evaluation
-        const conditionType = conditionData.conditionType || 'product_package';
-        const conditionValue = conditionData.conditionValue;
-        const operator = conditionData.operator || 'equals';
-
-        // Evaluate condition
-        conditionResult = this.evaluateCondition(
-          conditionType,
-          conditionValue,
-          operator,
-          context.data
-        );
-
-        this.logger.log(`Structured condition evaluated: ${conditionType} ${operator} ${conditionValue} = ${conditionResult}`);
+        throw new Error('Only if-else structures are supported');
       }
 
       // Determine next steps based on condition result
@@ -98,41 +113,18 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
     const errors = [...baseValidation.errors];
     const warnings = [...baseValidation.warnings];
 
+    console.log(`[DEBUG] Condition validation - step data:`, JSON.stringify(step.data, null, 2));
+
     // Validate condition-specific properties
-    // Check if it's a structured condition (with conditionType and conditionValue)
-    // or a generic condition (with custom condition JsonLogic rule)
-    const hasStructuredCondition = step.data?.conditionType && step.data?.conditionValue;
-    const hasGenericCondition = step.data?.condition && typeof step.data.condition === 'object';
+    // Only check for if-else structure (which should be handled by JsonLogic execution)
+    const hasIfElseStructure = step.data?.if && Array.isArray(step.data.if);
 
-    if (!hasStructuredCondition && !hasGenericCondition) {
-      errors.push('Either condition type/value or custom condition rule is required');
+    console.log(`[DEBUG] hasIfElseStructure: ${hasIfElseStructure}`);
+
+    if (!hasIfElseStructure) {
+      errors.push('If-else structure is required');
     }
 
-    if (hasStructuredCondition) {
-      if (!step.data?.conditionType) {
-        errors.push('Condition type is required');
-      }
-
-      if (!step.data?.conditionValue) {
-        errors.push('Condition value is required');
-      }
-    }
-
-    // Validate condition type
-    const validConditionTypes = [
-      'product_package', 'user_segment', 'subscription_status',
-      'email_domain', 'custom_field', 'date_range', 'user_condition'
-    ];
-
-    if (step.data?.conditionType && !validConditionTypes.includes(step.data.conditionType)) {
-      errors.push(`Invalid condition type: ${step.data.conditionType}. Must be one of: ${validConditionTypes.join(', ')}`);
-    }
-
-    // Validate operator
-    const validOperators = ['equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than', 'in', 'not_in'];
-    if (step.data?.operator && !validOperators.includes(step.data.operator)) {
-      errors.push(`Invalid operator: ${step.data.operator}. Must be one of: ${validOperators.join(', ')}`);
-    }
 
     return {
       isValid: errors.length === 0,
@@ -229,6 +221,89 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
     return path.split('.').reduce((current, key) => {
       return current && current[key] !== undefined ? current[key] : undefined;
     }, obj);
+  }
+
+  private findMatchingIfBranch(ifBranches: any[], contextData: any): any {
+    const jsonLogic = require('json-logic-js');
+
+    for (let i = 0; i < ifBranches.length - 1; i += 2) {
+      const condition = ifBranches[i];
+      const branchActions = ifBranches[i + 1];
+
+      // Convert simple condition syntax to JsonLogic syntax
+      const jsonLogicCondition = this.convertToJsonLogic(condition);
+      this.logger.log(`Converted condition ${JSON.stringify(condition)} to JsonLogic: ${JSON.stringify(jsonLogicCondition)}`);
+
+
+      // Evaluate the condition
+      const conditionResult = jsonLogic.apply(jsonLogicCondition, contextData);
+      this.logger.log(`Evaluating condition: ${conditionResult}`);
+
+      if (conditionResult) {
+        this.logger.log(`Found matching condition branch`);
+        return branchActions;
+      }
+    }
+
+    // Check if there's a default else branch (odd number of elements, last one is the else)
+    if (ifBranches.length % 2 === 1) {
+      const elseBranch = ifBranches[ifBranches.length - 1];
+      this.logger.log(`Using default else branch`);
+      return elseBranch;
+    }
+
+    return null;
+  }
+
+  private extractActionsFromBranch(branch: any): any[] {
+    if (branch.and && Array.isArray(branch.and)) {
+      // Extract actions from 'and' array, skipping the condition
+      return branch.and.slice(1); // Skip first element (the condition)
+    } else if (branch.if && Array.isArray(branch.if)) {
+      // Handle nested if-else
+      return [branch];
+    } else {
+      // Single action
+      return [branch];
+    }
+  }
+
+  private convertToJsonLogic(condition: any): any {
+    // Handle simple key-value conditions like {"product_package": "package_1"}
+    if (typeof condition === 'object' && condition !== null) {
+      const keys = Object.keys(condition);
+      if (keys.length === 1) {
+        const key = keys[0];
+        const value = condition[key];
+
+        // Check if it's a condition field
+        if (['product_package', 'user_segment', 'subscription_status', 'email_domain'].includes(key)) {
+          return {
+            "==": [{"var": key}, value]
+          };
+        }
+
+        // Handle complex conditions like {"product_package": {"!": {"in": ["package_1", "package_2"]}}}
+        if (typeof value === 'object' && value !== null) {
+          const valueKeys = Object.keys(value);
+          if (valueKeys.length === 1) {
+            const operator = valueKeys[0];
+            const operatorValue = value[operator];
+
+            if (operator === '!' && operatorValue.in) {
+              return {
+                "!": {
+                  "in": [{"var": key}, operatorValue.in]
+                }
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Return as-is if no conversion needed
+    return condition;
   }
 }
 

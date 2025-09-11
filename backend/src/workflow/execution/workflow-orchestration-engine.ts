@@ -257,6 +257,19 @@ export class WorkflowOrchestrationEngine {
         // Update current step in execution record
         execution.currentStep = step.id;
 
+        // Check if the step result contains actions to execute (from condition executor)
+        if (stepResult.result?.extractedActions && Array.isArray(stepResult.result.extractedActions)) {
+          this.logger.log(`Processing ${stepResult.result.extractedActions.length} dynamic actions from condition`);
+
+          // Convert actions to steps and execute them
+          const dynamicSteps = this.convertActionsToSteps(stepResult.result.extractedActions, currentStepIndex);
+
+          // Insert the dynamic steps after the current step
+          steps.splice(currentStepIndex + 1, 0, ...dynamicSteps);
+
+          this.logger.log(`Added ${dynamicSteps.length} dynamic steps to workflow execution`);
+        }
+
         // Check if workflow should be suspended (e.g., for delays) BEFORE saving state
         if (stepResult.metadata?.workflowSuspended) {
           this.logger.log(`Workflow suspended at step: ${step.id}`);
@@ -434,8 +447,8 @@ export class WorkflowOrchestrationEngine {
       this.logger.log(`Context data is empty, attempting to restore from delay context`);
 
       if (delay.context) {
-        // The delay context contains user data directly, so we need to put it in the data property
-        const userData = {
+        // Restore all context data, including product_package and other subscription data
+        const contextData = {
           userId: delay.context.userId,
           email: delay.context.email,
           name: delay.context.name,
@@ -443,14 +456,18 @@ export class WorkflowOrchestrationEngine {
           preferences: delay.context.preferences,
           isActive: delay.context.isActive,
           timezone: delay.context.timezone,
-          phoneNumber: delay.context.phoneNumber
+          phoneNumber: delay.context.phoneNumber,
+          // Include subscription-specific data
+          product_package: delay.context.product_package,
+          subscriptionId: delay.context.subscriptionId,
+          product: delay.context.product
         };
 
         executionState.context.data = {
           ...executionState.context.data,
-          ...userData
+          ...contextData
         };
-        this.logger.log(`[Workflow: ${execution.workflowId}] [Step: context-restore] [executionId:${execution.id}] [userId:${executionState.context.data?.userId || 'unknown'}]`);
+        this.logger.log(`[Workflow: ${execution.workflowId}] [Step: context-restore] [executionId:${execution.id}] [userId:${executionState.context.data?.userId || 'unknown'}] [product_package:${executionState.context.data?.product_package || 'unknown'}]`);
       }
     }
 
@@ -468,11 +485,10 @@ export class WorkflowOrchestrationEngine {
       resumeFromIndex = workflow.steps.findIndex(step => step.id === resumeFromStepId);
 
       if (resumeFromIndex === -1) {
-        this.logger.warn(`Delay step ${resumeFromStepId} not found in workflow definition, starting from beginning`);
-        // Start from the beginning but continue the existing execution
-        const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
-        await this.updateExecutionStatus(execution, result);
-        return;
+        this.logger.warn(`Delay step ${resumeFromStepId} not found in workflow definition`);
+        // This is expected for dynamic workflows - the delay step was created dynamically
+        // We'll handle this in the dynamic step reconstruction logic below
+        resumeFromIndex = 0; // Set a default value, but we won't use it for dynamic workflows
       }
 
       // Continue from the next step after the delay
@@ -536,10 +552,53 @@ export class WorkflowOrchestrationEngine {
       this.logger.log(`Adjusted resumeFromIndex to ${resumeFromIndex} to skip delay step ${delay.stepId}`);
     }
 
-    // Continue from the determined step
-    const remainingSteps = workflow.steps.slice(resumeFromIndex);
+    // For dynamic workflows, we need to reconstruct the steps from the execution history
+    // The original workflow.steps only contains the initial steps, not the dynamic ones
+    let remainingSteps;
 
-    if (remainingSteps.length === 0) {
+    // Always try to reconstruct dynamic steps first if we have a delay
+    if (delay) {
+      this.logger.log(`Reconstructing dynamic steps from delay: ${delay.stepId}`);
+      remainingSteps = await this.reconstructDynamicStepsFromDelay(workflow, executionState.context, delay);
+
+      if (remainingSteps && remainingSteps.length > 0) {
+        this.logger.log(`Successfully reconstructed ${remainingSteps.length} dynamic steps`);
+      } else {
+        this.logger.warn(`Failed to reconstruct dynamic steps, falling back to original workflow`);
+        remainingSteps = workflow.steps.slice(resumeFromIndex);
+      }
+    } else if (history.length > 0 && history.some((step: any) => step.stepId.startsWith('step_'))) {
+      // This is a dynamic workflow - reconstruct steps from execution history
+      this.logger.log(`Reconstructing dynamic steps from execution history`);
+
+      // Get all step IDs from history (excluding 'final', 'error', etc.)
+      const executedStepIds = history
+        .filter((step: any) => step.stepId.startsWith('step_'))
+        .map((step: any) => step.stepId)
+        .sort();
+
+      // Find the index of the delay step in the executed steps
+      const delayStepIndex = executedStepIds.findIndex(id => id === delay?.stepId);
+
+      if (delayStepIndex !== -1) {
+        // Get remaining step IDs after the delay step
+        const remainingStepIds = executedStepIds.slice(delayStepIndex + 1);
+        this.logger.log(`Remaining dynamic steps to execute: ${remainingStepIds.join(', ')}`);
+
+        // For dynamic steps, we need to reconstruct them from the original JsonLogic
+        // Since we can't easily reconstruct the exact dynamic steps, we'll need to
+        // re-evaluate the condition to get the remaining actions
+        remainingSteps = await this.reconstructDynamicStepsFromDelay(workflow, executionState.context, delay);
+      } else {
+        // Fallback to original logic
+        remainingSteps = workflow.steps.slice(resumeFromIndex);
+      }
+    } else {
+      // Original static workflow logic
+      remainingSteps = workflow.steps.slice(resumeFromIndex);
+    }
+
+    if (!remainingSteps || remainingSteps.length === 0) {
       this.logger.log(`All steps completed for execution ${execution.id}`);
       execution.status = 'completed';
       execution.currentStep = 'end';
@@ -583,6 +642,81 @@ export class WorkflowOrchestrationEngine {
     execution.status = 'completed';
     await this.executionRepository.save(execution);
     this.logger.log(`[Workflow: ${execution.workflowId}] [Step: finalize] [executionId:${execution.id}] [status:success]`);
+  }
+
+  /**
+   * Reconstruct dynamic steps from delay context
+   * This method re-evaluates the condition to get the remaining actions after a delay
+   */
+  private async reconstructDynamicStepsFromDelay(
+    workflow: any,
+    context: WorkflowExecutionContext,
+    delay: WorkflowDelay
+  ): Promise<any[]> {
+    this.logger.log(`Reconstructing dynamic steps from delay: ${delay.id}`);
+
+    // Find the condition step in the workflow that generated the dynamic steps
+    const conditionStep = workflow.steps.find((step: any) => step.type === 'condition');
+
+    if (!conditionStep) {
+      this.logger.warn(`No condition step found in workflow, cannot reconstruct dynamic steps`);
+      return [];
+    }
+
+    // Re-evaluate the condition to get the actions
+    const conditionExecutor = this.nodeRegistry.getExecutor('condition');
+    if (!conditionExecutor) {
+      this.logger.warn(`Condition executor not found, cannot reconstruct dynamic steps`);
+      return [];
+    }
+
+    try {
+      // Execute the condition again to get the actions
+      const conditionResult = await conditionExecutor.execute(conditionStep, context, null);
+
+      if (!conditionResult.success || !conditionResult.result?.extractedActions) {
+        this.logger.warn(`Condition execution failed or no actions extracted`);
+        return [];
+      }
+
+      const actions = conditionResult.result.extractedActions;
+      this.logger.log(`Reconstructed ${actions.length} actions from condition`);
+
+      // Convert actions to steps, but only include the ones after the delay
+      // We need to find which action corresponds to the delay step
+      const delayStepId = delay.stepId;
+      const delayStepNumber = parseInt(delayStepId.split('_')[1]);
+
+      this.logger.log(`Looking for actions after delay step ${delayStepId} (step number: ${delayStepNumber})`);
+
+      // Find the delay action in the actions array
+      let delayActionIndex = -1;
+      for (let i = 0; i < actions.length; i++) {
+        if (actions[i].delay && actions[i].delay.type === delay.context?.originalDelayType) {
+          delayActionIndex = i;
+          break;
+        }
+      }
+
+      if (delayActionIndex === -1) {
+        this.logger.warn(`Could not find delay action in actions array, using step number ${delayStepNumber}`);
+        delayActionIndex = delayStepNumber;
+      }
+
+      // Get actions after the delay step
+      const remainingActions = actions.slice(delayActionIndex + 1);
+      this.logger.log(`Found ${remainingActions.length} remaining actions after delay (index ${delayActionIndex + 1})`);
+
+      // Convert remaining actions to steps
+      const remainingSteps = this.convertActionsToSteps(remainingActions, delayActionIndex);
+
+      this.logger.log(`Converted ${remainingActions.length} remaining actions to ${remainingSteps.length} steps`);
+      return remainingSteps;
+
+    } catch (error) {
+      this.logger.error(`Error reconstructing dynamic steps: ${error.message}`);
+      return [];
+    }
   }
 
   /**
@@ -643,6 +777,62 @@ export class WorkflowOrchestrationEngine {
   // ============================================================================
   // UTILITY METHODS (No Business Logic)
   // ============================================================================
+
+  private convertActionsToSteps(actions: any[], startIndex: number): any[] {
+    return actions.map((action, actionIndex) => {
+      const stepIndex = startIndex + actionIndex + 1;
+
+      // Determine step type and action details based on action keys
+      let stepType = 'action';
+      let actionType = 'custom';
+      let actionName = 'custom_step';
+
+      if (action.delay) {
+        stepType = 'delay';
+        actionType = 'delay';
+        actionName = 'delay_step';
+        // Add required delay fields for validation
+        action.type = action.delay.type || '1_day';
+        action.delayMs = this.convertDelayTypeToMs(action.delay.type);
+      } else if (action.send_email) {
+        stepType = 'action';
+        actionType = 'send_email';
+        actionName = 'send_email_step';
+        // Add required email fields for validation
+        if (action.send_email.data) {
+          action.templateId = action.send_email.data.templateId || 'welcome_email';
+          action.subject = action.send_email.data.subject || 'Welcome to our service!';
+          action.to = action.send_email.data.to || 'user@example.com';
+        }
+      } else if (action.send_sms) {
+        stepType = 'action';
+        actionType = 'send_sms';
+        actionName = 'send_sms_step';
+      } else if (action.sharedFlow) {
+        stepType = 'shared-flow';
+        actionType = 'custom';
+        actionName = 'shared_flow_step';
+        // Add required flowName for shared flow validation
+        action.flowName = action.sharedFlow.name || 'default_flow';
+      } else if (action.end) {
+        stepType = 'end';
+        actionType = 'custom';
+        actionName = 'end_step';
+        action.reason = action.end.reason || 'completed';
+      }
+
+      // Always add the required actionType and actionName fields
+      action.actionType = actionType;
+      action.actionName = actionName;
+
+      return {
+        id: `step_${stepIndex}`,
+        type: stepType,
+        data: action,
+        rule: action
+      };
+    });
+  }
 
   private async findExistingExecution(
     workflowId: string,
@@ -827,6 +1017,25 @@ export class WorkflowOrchestrationEngine {
           actionName = 'shared_flow_step';
           // Add required flowName for shared flow validation
           action.flowName = action.sharedFlow.name || 'default_flow';
+        } else if (this.isSimpleCondition(action)) {
+          // Handle simple key-value conditions like {"product_package": "package_1"}
+          console.log(`[DEBUG] Found simple condition:`, JSON.stringify(action));
+          stepType = 'condition';
+          actionType = 'custom';
+          actionName = 'condition_step';
+
+          const conditionKey = Object.keys(action).find(key =>
+            ['product_package', 'user_segment', 'subscription_status', 'email_domain'].includes(key)
+          );
+
+          if (conditionKey) {
+            action.conditionType = conditionKey;
+            action.conditionValue = action[conditionKey];
+            action.operator = 'equals';
+            console.log(`[DEBUG] Set condition fields - type: ${conditionKey}, value: ${action[conditionKey]}, operator: equals`);
+          } else {
+            console.log(`[DEBUG] No valid condition key found in:`, Object.keys(action));
+          }
         } else if (action.end) {
           stepType = 'end';
           actionType = 'custom';
@@ -916,6 +1125,21 @@ export class WorkflowOrchestrationEngine {
             actionName = 'shared_flow_step';
             // Add required flowName for shared flow validation
             action.flowName = action.sharedFlow.name || 'default_flow';
+          } else if (this.isSimpleCondition(action)) {
+            // Handle simple key-value conditions like {"product_package": "package_1"}
+            stepType = 'condition';
+            actionType = 'custom';
+            actionName = 'condition_step';
+
+            const conditionKey = Object.keys(action).find(key =>
+              ['product_package', 'user_segment', 'subscription_status', 'email_domain'].includes(key)
+            );
+
+            if (conditionKey) {
+              action.conditionType = conditionKey;
+              action.conditionValue = action[conditionKey];
+              action.operator = 'equals';
+            }
           } else if (action.end) {
             stepType = 'end';
             actionType = 'custom';
@@ -980,6 +1204,22 @@ export class WorkflowOrchestrationEngine {
     };
 
     return delayMap[delayType] || 1000; // Default to 1 second if not found
+  }
+
+  private isSimpleCondition(action: any): boolean {
+    // Check if this is a simple key-value condition like {"product_package": "package_1"}
+    const keys = Object.keys(action);
+
+    if (keys.length !== 1) {
+      return false;
+    }
+
+    const conditionTypes = ['product_package', 'user_segment', 'subscription_status', 'email_domain'];
+    const key = keys[0];
+    const value = action[key];
+
+
+    return conditionTypes.includes(key) && typeof value === 'string';
   }
 
   private determineNextStepIndex(

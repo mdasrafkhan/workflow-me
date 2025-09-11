@@ -161,7 +161,7 @@ export function initializeDefaultTemplates() {
         position: { x: 100, y: 150 },
         data: {
           conditionType: 'product_package',
-          conditionValue: 'package_1',
+          conditionValue: 'united',
           operator: 'equals',
           description: 'Product Package 1 (United)',
           label: 'Package 1?'
@@ -186,7 +186,7 @@ export function initializeDefaultTemplates() {
         position: { x: 300, y: 150 },
         data: {
           conditionType: 'product_package',
-          conditionValue: 'package_2',
+          conditionValue: 'podcast',
           operator: 'equals',
           description: 'Product Package 2 (Podcast)',
           label: 'Package 2?'
@@ -211,7 +211,7 @@ export function initializeDefaultTemplates() {
         position: { x: 500, y: 150 },
         data: {
           conditionType: 'product_package',
-          conditionValue: 'package_1,package_2',
+          conditionValue: 'united,podcast',
           operator: 'not_in',
           description: 'All other product packages',
           label: 'All Others?'

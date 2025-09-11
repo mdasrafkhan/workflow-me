@@ -55,6 +55,7 @@ export class WorkflowCron {
 
           for (const workflow of subscriptionWorkflows) {
             try {
+              // Use workflow ID directly
               const subscriptionTriggers = await this.subscriptionTriggerService.retrieveTriggerData(workflow.id);
 
               let processedCount = 0;
@@ -310,6 +311,24 @@ export class WorkflowCron {
         if (rule.and && Array.isArray(rule.and)) {
           for (const condition of rule.and) {
             if (condition && condition.trigger && condition.trigger.event === eventType) {
+              return true;
+            }
+          }
+        }
+
+        // Check for 'if' trigger structure (if-else format)
+        if (rule.if && Array.isArray(rule.if)) {
+          // Look for trigger in the if-else structure
+          for (const branch of rule.if) {
+            if (branch && branch.and && Array.isArray(branch.and)) {
+              for (const condition of branch.and) {
+                if (condition && condition.trigger && condition.trigger.event === eventType) {
+                  return true;
+                }
+              }
+            }
+            // Also check direct trigger in if branches
+            if (branch && branch.trigger && branch.trigger.event === eventType) {
               return true;
             }
           }

@@ -211,11 +211,11 @@ export class WorkflowService {
         }
       });
 
-      // Clean up old executed delays (older than 1 hour)
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      // Clean up old executed delays (older than 1 day)
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       await this.delayRepo.delete({
         status: 'executed',
-        executedAt: LessThan(oneHourAgo)
+        executedAt: LessThan(oneDayAgo)
       });
 
       // Process each delay individually to handle multiple delays per execution

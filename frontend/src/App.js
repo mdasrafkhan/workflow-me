@@ -1028,7 +1028,7 @@ function App() {
                   onClick={() => loadTemplate("segmented-welcome-flow")}
                   style={{ fontSize: "11px", marginBottom: "4px" }}
                 >
-                  🌳 Segmented Welcome Flow (Tree Structure)
+                  🌳 Segmented Welcome Flow (Fixed Parallel)
                 </button>
               </div>
             </div>

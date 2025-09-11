@@ -6,6 +6,7 @@ import { DummyUser } from '../database/entities/dummy-user.entity';
 import { DummySubscriptionType } from '../database/entities/dummy-subscription-type.entity';
 import { WorkflowExecutionSchedule } from '../database/entities/workflow-execution-schedule.entity';
 import { WorkflowExecutionContext, TriggerData } from '../workflow/types';
+import { VisualWorkflow } from '../workflow/visual-workflow.entity';
 
 @Injectable()
 export class SubscriptionTriggerService {
@@ -20,13 +21,54 @@ export class SubscriptionTriggerService {
     private readonly subscriptionTypeRepository: Repository<DummySubscriptionType>,
     @InjectRepository(WorkflowExecutionSchedule)
     private readonly executionScheduleRepository: Repository<WorkflowExecutionSchedule>,
+    @InjectRepository(VisualWorkflow)
+    private readonly workflowRepository: Repository<VisualWorkflow>,
   ) {}
+
+  /**
+   * Look up workflow by name and return the actual workflow ID
+   */
+  private async lookupWorkflowByName(workflowName: string): Promise<string | null> {
+    try {
+      const workflow = await this.workflowRepository.findOne({
+        where: { name: workflowName }
+      });
+
+      if (workflow) {
+        this.logger.log(`Found workflow: ${workflowName} -> ${workflow.id}`);
+        return workflow.id;
+      } else {
+        this.logger.warn(`Workflow not found by name: ${workflowName}`);
+        return null;
+      }
+    } catch (error) {
+      this.logger.error(`Error looking up workflow by name ${workflowName}:`, error);
+      return null;
+    }
+  }
 
   /**
    * Retrieve all new subscriptions that need workflow processing
    */
-  async retrieveTriggerData(workflowId: string): Promise<TriggerData[]> {
+  async retrieveTriggerData(workflowIdOrName: string): Promise<TriggerData[]> {
     const triggerType = 'user_buys_subscription';
+
+    // Check if the input is a workflow name or ID
+    let workflowId: string;
+
+    // If it looks like a UUID, use it directly; otherwise, look it up by name
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(workflowIdOrName)) {
+      workflowId = workflowIdOrName;
+    } else {
+      // Look up workflow by name
+      const lookedUpId = await this.lookupWorkflowByName(workflowIdOrName);
+      if (!lookedUpId) {
+        this.logger.warn(`No subscriptions to process - workflow not found: ${workflowIdOrName}`);
+        return [];
+      }
+      workflowId = lookedUpId;
+    }
 
     // Get or create execution schedule record for this specific workflow
     let executionSchedule = await this.executionScheduleRepository.findOne({

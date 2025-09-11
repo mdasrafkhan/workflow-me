@@ -139,9 +139,92 @@ export class JsonLogicConverter {
       // Action nodes with multiple paths - execute all paths
       return this.createActionBranch(nodeLogic, branches);
     } else {
+      // For triggers with multiple conditions, create if-else logic instead of parallel
+      if (nodeType && nodeType.category && nodeType.category.includes('Triggers')) {
+        return this.createTriggerConditionalLogic(nodeLogic, branches, branchNodes);
+      }
       // Default: parallel execution
       return this.createParallelBranch(nodeLogic, branches);
     }
+  }
+
+  /**
+   * Create conditional logic for triggers with multiple condition branches
+   * This prevents parallel execution and creates if-else logic instead
+   */
+  static createTriggerConditionalLogic(triggerLogic, branches, branchNodes) {
+    if (branches.length === 0) {
+      return triggerLogic;
+    }
+
+    if (branches.length === 1) {
+      return this.chainLogic(triggerLogic, branches[0]);
+    }
+
+    // For multiple branches, create if-else logic starting with the trigger
+    let conditionalLogic = null;
+
+    // Process branches in reverse order to build proper if-else chain
+    for (let i = branches.length - 1; i >= 0; i--) {
+      const branchNode = branchNodes[i];
+      const branchLogic = branches[i];
+
+      // Extract condition logic from the branch
+      let conditionLogic;
+
+      if (branchNode.type === 'condition') {
+        // Direct condition node
+        conditionLogic = NodeRegistry.convertNodeToJsonLogic(branchNode);
+      } else {
+        // Branch starts with a condition, extract it
+        conditionLogic = this.extractConditionFromBranch(branchLogic);
+      }
+
+      if (conditionLogic && !conditionLogic.always) {
+        // Create if-else structure: if condition then branch else continue
+        if (conditionalLogic === null) {
+          conditionalLogic = branchLogic;
+        } else {
+          conditionalLogic = {
+            "if": [
+              conditionLogic,
+              branchLogic,
+              conditionalLogic
+            ]
+          };
+        }
+      } else {
+        // No condition found, this becomes the else case
+        if (conditionalLogic === null) {
+          conditionalLogic = branchLogic;
+        } else {
+          conditionalLogic = this.chainLogic(conditionalLogic, branchLogic);
+        }
+      }
+    }
+
+    // Chain the trigger logic with the conditional logic
+    return this.chainLogic(triggerLogic, conditionalLogic);
+  }
+
+  /**
+   * Extract condition logic from a branch that starts with a condition
+   */
+  static extractConditionFromBranch(branchLogic) {
+    // Look for condition logic in the branch
+    if (branchLogic.and && Array.isArray(branchLogic.and)) {
+      const condition = branchLogic.and.find(item =>
+        item.product_package ||
+        item.user_segment ||
+        item.subscription_status ||
+        (typeof item === 'object' && Object.keys(item).some(key =>
+          key.includes('condition') || key.includes('package') || key.includes('segment')
+        ))
+      );
+      return condition || { "always": true };
+    }
+
+    return { "always": true };
   }
 
   /**

@@ -48,7 +48,25 @@ export class WorkflowToJsonLogicConverter {
         "and": [nodeLogic, this.buildLogicTree(children[0], allNodes, allEdges)]
       };
     } else {
-      // Multiple children - create OR condition
+      // Multiple children - check if this is a conditional branch
+      if (node.type === 'subscription-trigger' || node.type === 'newsletter-trigger') {
+        // Check if all children are conditions (for if-else logic)
+        const allConditions = children.every(child => child.type === 'condition');
+        if (allConditions) {
+          // For triggers with multiple conditions, create if-else logic
+          return this.buildConditionalLogic(node, children, allNodes, allEdges);
+        }
+
+        // Check if this is a parallel structure (conditions with actions)
+        const hasConditions = children.some(child => child.type === 'condition');
+        if (hasConditions) {
+          // For triggers with condition-action pairs, create if-else logic instead of parallel
+          this.logger.warn('Converting parallel structure to if-else logic to prevent duplicate delays');
+          return this.buildConditionalLogic(node, children, allNodes, allEdges);
+        }
+      }
+
+      // For other cases, use OR logic (this will create parallel structure)
       const childLogics = children.map(child =>
         this.buildLogicTree(child, allNodes, allEdges)
       );
@@ -56,6 +74,49 @@ export class WorkflowToJsonLogicConverter {
         "and": [nodeLogic, { "or": childLogics }]
       };
     }
+  }
+
+  /**
+   * Build conditional logic for if-else branching
+   */
+  static buildConditionalLogic(triggerNode, childNodes, allNodes, allEdges) {
+    const triggerLogic = this.convertNodeToLogic(triggerNode);
+
+    // Filter out only condition nodes from the children
+    const conditionNodes = childNodes.filter(node => node.type === 'condition');
+
+    if (conditionNodes.length === 0) {
+      // No conditions, just return trigger logic
+      return triggerLogic;
+    }
+
+    // Build if-else chain for each condition-action pair
+    let conditionalLogic = triggerLogic;
+
+    // Process conditions in reverse order to build proper if-else chain
+    for (let i = conditionNodes.length - 1; i >= 0; i--) {
+      const conditionNode = conditionNodes[i];
+      const conditionLogic = this.convertNodeToLogic(conditionNode);
+
+      // Find the action node that follows this condition
+      const actionNode = this.getChildNodes(conditionNode.id, allNodes, allEdges)[0];
+
+      if (actionNode) {
+        // Build the complete action logic including shared flow
+        const actionLogic = this.buildLogicTree(actionNode, allNodes, allEdges);
+
+        // Create if-else structure: if condition then action else continue
+        conditionalLogic = {
+          "if": [
+            conditionLogic,
+            actionLogic,
+            conditionalLogic
+          ]
+        };
+      }
+    }
+
+    return conditionalLogic;
   }
 
   /**
@@ -70,6 +131,8 @@ export class WorkflowToJsonLogicConverter {
         return this.convertNewsletterTriggerNode(node);
 
       // Condition Nodes
+      case 'condition':
+        return this.convertConditionNode(node);
       case 'product-condition':
         return this.convertProductConditionNode(node);
       case 'user-segment-condition':
@@ -128,6 +191,59 @@ export class WorkflowToJsonLogicConverter {
   }
 
   // Condition Node Converters
+  static convertConditionNode(node) {
+    const conditionType = node.data?.conditionType;
+    const conditionValue = node.data?.conditionValue;
+    const operator = node.data?.operator || 'equals';
+
+    if (!conditionType || !conditionValue) return { "always": true };
+
+    // Map condition types to variable names
+    const variableMap = {
+      'product_package': 'subscription_package',
+      'user_segment': 'user_segment',
+      'subscription_status': 'subscription_status'
+    };
+
+    const variable = variableMap[conditionType] || conditionType;
+
+    // Handle different operators
+    switch (operator) {
+      case 'equals':
+        return {
+          "==": [
+            { "var": variable },
+            conditionValue
+          ]
+        };
+      case 'not_equals':
+        return {
+          "!=": [
+            { "var": variable },
+            conditionValue
+          ]
+        };
+      case 'in':
+        return {
+          "in": [
+            { "var": variable },
+            conditionValue.split(',').map(v => v.trim())
+          ]
+        };
+      case 'not_in':
+        return {
+          "!": {
+            "in": [
+              { "var": variable },
+              conditionValue.split(',').map(v => v.trim())
+            ]
+          }
+        };
+      default:
+        return { "always": true };
+    }
+  }
+
   static convertProductConditionNode(node) {
     const packageType = node.data?.selected;
     if (!packageType) return { "always": true };
