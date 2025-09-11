@@ -25,6 +25,7 @@ help:
 	@echo "  test-runner       Run manual test suite"
 	@echo "  test-unit         Run all unit tests locally"
 	@echo "  test-orchestration Run orchestration engine tests locally"
+	@echo "  test-frontend     Run frontend conversion tests locally"
 	@echo ""
 	@echo "Database:"
 	@echo "  db           Connect to database"
@@ -42,9 +43,11 @@ dev:
 	docker-compose up -d
 
 dev-build:
-	@echo "Running unit tests before building..."
+	@echo "Running backend unit tests before building..."
 	@cd ../backend && npm test
-	@echo "Unit tests passed! Building and starting development environment..."
+	@echo "Backend unit tests passed! Running frontend tests..."
+	@cd ../frontend && npm test -- --watchAll=false
+	@echo "Frontend tests passed! Building and starting development environment..."
 	docker-compose up --build -d
 
 dev-logs:
@@ -76,6 +79,10 @@ test-runner:
 test-orchestration:
 	@echo "Running orchestration engine tests..."
 	@cd ../backend && npm run test:orchestration
+
+test-frontend:
+	@echo "Running frontend conversion tests..."
+	@cd ../frontend && npm test -- --watchAll=false
 
 test-unit:
 	@echo "Running all unit tests..."
