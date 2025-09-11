@@ -79,7 +79,7 @@ services:
       # Application Configuration
       NODE_ENV: test
       PORT: 4000
-    command: ["npm", "test", "--", "--watchAll=false", "--passWithNoTests"]
+    command: ["npm", "test", "--", "workflow-orchestration-engine.spec.ts", "--watchAll=false", "--verbose"]
     networks:
       - workflow-network
     user: "1001:1001"

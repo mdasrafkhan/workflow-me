@@ -315,6 +315,80 @@ export class WorkflowController {
     };
   }
 
+  @Post('test/users')
+  async testUsersWorkflow(@Body() body: {
+    email: string;
+    name: string;
+    phoneNumber?: string;
+    timezone?: string;
+    preferences?: Record<string, any>;
+  }) {
+    try {
+      this.logger.log(`[Workflow: users-test] [Step: start] [email:${body.email}] [name:${body.name}]`);
+
+      // Validate input
+      if (!body.email || !body.name) {
+        throw new Error('Email and name are required');
+      }
+
+      // Check if user already exists
+      const existingUser = await this.dummyDataService.userRepository.findOne({
+        where: { email: body.email }
+      });
+
+      if (existingUser) {
+        this.logger.log(`[Workflow: users-test] [Step: user-exists] [email:${body.email}] [userId:${existingUser.id}]`);
+        return {
+          message: 'User already exists',
+          userId: existingUser.id,
+          email: existingUser.email,
+          name: existingUser.name,
+          isNewUser: false
+        };
+      }
+
+      // Create a new user
+      const { v4: uuidv4 } = require('uuid');
+      const userId = uuidv4();
+
+      const newUser = await this.dummyDataService.userRepository.save({
+        id: userId,
+        email: body.email,
+        name: body.name,
+        phoneNumber: body.phoneNumber || null,
+        isActive: true,
+        timezone: body.timezone || 'UTC',
+        preferences: body.preferences || { language: 'en', notifications: true },
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      this.logger.log(`[Workflow: users-test] [Step: user-created] [userId:${newUser.id}] [email:${newUser.email}]`);
+
+      this.logger.log(`[Workflow: users-test] [Step: complete] [userId:${newUser.id}] [email:${newUser.email}]`);
+
+      return {
+        message: 'User created successfully',
+        userId: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        phoneNumber: newUser.phoneNumber,
+        timezone: newUser.timezone,
+        preferences: newUser.preferences,
+        isActive: newUser.isActive,
+        createdAt: newUser.createdAt,
+        isNewUser: true
+      };
+    } catch (error) {
+      this.logger.error(`[Workflow: users-test] [Step: failed] [error:${error.message}]`);
+      return {
+        statusCode: 500,
+        message: error.message || 'Internal server error',
+        error: error.stack
+      };
+    }
+  }
+
   @Post('test/create-subscriptions')
   async createTestSubscriptions(@Body() body: {
     count?: number;

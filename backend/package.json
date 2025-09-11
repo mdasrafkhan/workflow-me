@@ -16,6 +16,7 @@
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:workflow": "jest --testPathPattern=workflow",
+    "test:orchestration": "jest src/workflow/execution/workflow-orchestration-engine.spec.ts --verbose",
     "test:workflow:build": "npx ts-node src/build-test.ts",
     "test:runner": "npx ts-node src/test-runner.ts",
     "test:clear": "npx ts-node src/clear-and-test.ts",

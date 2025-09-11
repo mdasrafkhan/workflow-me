@@ -10,7 +10,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  dev          Start development environment"
-	@echo "  dev-build    Build and start development environment"
+	@echo "  dev-build    Run tests, build and start development environment"
 	@echo "  dev-logs     View development logs"
 	@echo "  dev-shell    Open shell in backend container"
 	@echo ""
@@ -20,9 +20,11 @@ help:
 	@echo "  prod-logs    View production logs"
 	@echo ""
 	@echo "Testing:"
-	@echo "  test         Run workflow tests"
-	@echo "  test-build   Build and run tests"
-	@echo "  test-runner  Run manual test suite"
+	@echo "  test              Run workflow tests in Docker"
+	@echo "  test-build        Build and run tests"
+	@echo "  test-runner       Run manual test suite"
+	@echo "  test-unit         Run all unit tests locally"
+	@echo "  test-orchestration Run orchestration engine tests locally"
 	@echo ""
 	@echo "Database:"
 	@echo "  db           Connect to database"
@@ -40,6 +42,9 @@ dev:
 	docker-compose up -d
 
 dev-build:
+	@echo "Running unit tests before building..."
+	@cd ../backend && npm test
+	@echo "Unit tests passed! Building and starting development environment..."
 	docker-compose up --build -d
 
 dev-logs:
@@ -67,6 +72,14 @@ test-build:
 
 test-runner:
 	docker-compose run --rm workflow-tester npm run test:runner
+
+test-orchestration:
+	@echo "Running orchestration engine tests..."
+	@cd ../backend && npm run test:orchestration
+
+test-unit:
+	@echo "Running all unit tests..."
+	@cd ../backend && npm test
 
 # Database Management
 db:

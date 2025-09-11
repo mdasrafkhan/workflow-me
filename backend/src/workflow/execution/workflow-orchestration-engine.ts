@@ -622,6 +622,27 @@ export class WorkflowOrchestrationEngine {
           return;
         }
 
+        // Check if workflow should be suspended (e.g., for delays) AFTER executing step
+        if (result.metadata?.workflowSuspended) {
+          this.logger.log(`Workflow suspended at step: ${step.id}`);
+
+          // Save execution state with suspended status
+          const executionState = (execution as any).state;
+          if (executionState && executionState.history) {
+            executionState.history.push({
+              stepId: step.id,
+              state: 'suspended',
+              timestamp: new Date(),
+              result: result.result
+            });
+            await this.executionRepository.save(execution);
+            this.logger.debug(`Saved execution state after step ${step.id} (suspended)`);
+          }
+
+          // Return early - workflow is suspended
+          return;
+        }
+
         // Update context with step result
         if (result.result) {
           executionState.context.data = {
