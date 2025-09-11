@@ -26,7 +26,7 @@ export class WorkflowDelay {
   executeAt: Date;
 
   @Column()
-  status: 'pending' | 'executed' | 'cancelled' | 'failed';
+  status: 'pending' | 'processing' | 'executed' | 'cancelled' | 'failed';
 
   @Column({ type: 'jsonb' })
   context: Record<string, any>;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan, LessThanOrEqual, LessThan } from 'typeorm';
 import { VisualWorkflow } from './visual-workflow.entity';
@@ -9,6 +9,7 @@ import { WorkflowOrchestrationEngine } from './execution/workflow-orchestration-
 
 @Injectable()
 export class WorkflowService {
+  private readonly logger = new Logger(WorkflowService.name);
   constructor(
     @InjectRepository(VisualWorkflow)
     private visualWorkflowRepo: Repository<VisualWorkflow>,
@@ -190,34 +191,25 @@ export class WorkflowService {
    */
   async processDelayedExecutions(): Promise<void> {
     const now = new Date();
-    console.log(`Processing delayed executions ready at ${now.toISOString()}`);
 
     try {
-      // First, let's see how many total delays exist
-      const totalDelays = await this.delayRepo.count();
-      console.log(`Total delays in database: ${totalDelays}`);
-
       // Query the database for pending delays where executeAt <= now
+      // Also include processing delays that might have been stuck
       const readyDelays = await this.delayRepo.find({
-        where: {
-          status: 'pending',
-          executeAt: LessThanOrEqual(now)
-        },
+        where: [
+          {
+            status: 'pending',
+            executeAt: LessThanOrEqual(now)
+          },
+          {
+            status: 'processing',
+            executeAt: LessThanOrEqual(new Date(now.getTime() - 5 * 60 * 1000)) // 5 minutes ago
+          }
+        ],
         order: {
           executeAt: 'ASC'
         }
       });
-
-      console.log(`Found ${readyDelays.length} delayed executions ready to process`);
-
-      // Also check for overdue delays
-      const overdueDelays = await this.delayRepo.find({
-        where: {
-          status: 'pending',
-          executeAt: LessThan(now)
-        }
-      });
-      console.log(`Found ${overdueDelays.length} overdue delays`);
 
       // Clean up old executed delays (older than 1 hour)
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -226,9 +218,27 @@ export class WorkflowService {
         executedAt: LessThan(oneHourAgo)
       });
 
+      // Process each delay individually to handle multiple delays per execution
       for (const delay of readyDelays) {
         try {
-          console.log(`Processing delayed execution: ${delay.executionId} (delayId: ${delay.id}, executeAt: ${delay.executeAt.toISOString()})`);
+          // Use atomic update to prevent race conditions
+          // Only update if status is still 'pending'
+          const updateResult = await this.delayRepo.update(
+            {
+              id: delay.id,
+              status: 'pending' // Only update if still pending
+            },
+            {
+              status: 'processing', // Mark as processing to prevent other instances
+              updatedAt: new Date()
+            }
+          );
+
+          // If no rows were updated, another instance is already processing this delay
+          if (updateResult.affected === 0) {
+            this.logger.warn(`Delay ${delay.id} already being processed by another instance`);
+            continue;
+          }
 
           // Get the workflow execution
           const execution = await this.executionRepo.findOne({
@@ -236,7 +246,6 @@ export class WorkflowService {
           });
 
           if (!execution) {
-            console.error(`Workflow execution not found: ${delay.executionId}`);
             // Mark delay as failed since execution doesn't exist
             await this.delayRepo.update(delay.id, {
               status: 'failed',
@@ -246,22 +255,16 @@ export class WorkflowService {
             continue;
           }
 
-          console.log(`Found execution for delay ${delay.id}, resuming workflow...`);
-
-          // Resume the workflow from the delay step
+          // Resume the workflow from the specific delay step
           await this.workflowOrchestrationEngine.resumeWorkflowFromDelay(delay);
 
-          // Mark delay as executed
+          // Mark this specific delay as executed
           await this.delayRepo.update(delay.id, {
             status: 'executed',
             executedAt: new Date()
           });
-
-          console.log(`Successfully processed delayed execution: ${delay.executionId}`);
         } catch (error) {
-          console.error(`Error processing delayed execution ${delay.executionId}:`, error);
-
-          // Mark delay as failed
+          // Mark this specific delay as failed
           await this.delayRepo.update(delay.id, {
             status: 'failed',
             error: error.message

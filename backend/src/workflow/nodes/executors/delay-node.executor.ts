@@ -47,8 +47,8 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
       // Calculate execution time
       const executeAt = new Date(scheduledAt.getTime() + (delayHours * 60 * 60 * 1000));
 
-      // Check if delay already exists for this execution and step
-      const existingDelay = await this.delayRepository.findOne({
+      // Check if delay already exists for this execution step
+      let delayRecord = await this.delayRepository.findOne({
         where: {
           executionId: execution.executionId,
           stepId: step.id,
@@ -56,25 +56,25 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
         }
       });
 
-      if (existingDelay) {
+      if (delayRecord) {
         this.logger.warn(`Delay already exists for execution ${execution.executionId} step ${step.id}, skipping creation`);
         return this.createSuccessResult(
           {
-            delayId: existingDelay.id,
+            delayId: delayRecord.id,
             delayHours,
-            executeAt: existingDelay.executeAt.toISOString(),
+            executeAt: delayRecord.executeAt.toISOString(),
             status: 'pending'
           },
           undefined,
           {
             workflowSuspended: true,
-            resumeAt: existingDelay.executeAt.toISOString()
+            resumeAt: delayRecord.executeAt.toISOString()
           }
         );
       }
 
-      // Save delay to database
-      const delayRecord = this.delayRepository.create({
+      // Create new delay record
+      delayRecord = this.delayRepository.create({
         executionId: execution.executionId,
         stepId: step.id,
         delayType: delayType,
@@ -91,7 +91,27 @@ export class DelayNodeExecutor extends BaseNodeExecutor {
         retryCount: 0
       });
 
-      await this.delayRepository.save(delayRecord);
+      try {
+        await this.delayRepository.save(delayRecord);
+      } catch (error) {
+        // If it's a unique constraint violation, try to find the existing record
+        if (error.code === '23505' || error.message.includes('duplicate key')) {
+          this.logger.warn(`Delay creation failed due to duplicate, attempting to find existing record`);
+          delayRecord = await this.delayRepository.findOne({
+            where: {
+              executionId: execution.executionId,
+              stepId: step.id,
+              status: 'pending'
+            }
+          });
+
+          if (!delayRecord) {
+            throw new Error(`Failed to create delay and could not find existing record: ${error.message}`);
+          }
+        } else {
+          throw error;
+        }
+      }
 
       this.logger.log(`[Workflow: ${context.workflowId || 'unknown'}] [Step: ${step.id}] [type:delay] [delay:${delayHours}h] [resume:${executeAt.toISOString()}] [userId:${context.userId}]`);
 

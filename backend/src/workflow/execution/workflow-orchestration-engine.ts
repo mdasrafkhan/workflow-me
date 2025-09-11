@@ -257,7 +257,36 @@ export class WorkflowOrchestrationEngine {
         // Update current step in execution record
         execution.currentStep = step.id;
 
-        // Save execution state to database after each step
+        // Check if workflow should be suspended (e.g., for delays) BEFORE saving state
+        if (stepResult.metadata?.workflowSuspended) {
+          this.logger.log(`Workflow suspended at step: ${step.id}`);
+
+          // Save execution state with suspended status
+          const executionState = (execution as any).state;
+          if (executionState && executionState.history) {
+            executionState.history.push({
+              stepId: step.id,
+              state: 'suspended',
+              timestamp: new Date(),
+              result: stepResult.result
+            });
+            await this.executionRepository.save(execution);
+            this.logger.debug(`Saved execution state after step ${step.id} (suspended)`);
+          }
+
+          return {
+            success: true,
+            result: stepResult.result,
+            metadata: {
+              ...stepResult.metadata,
+              suspendedAt: step.id,
+              completedSteps,
+              resumeAt: stepResult.metadata.resumeAt
+            }
+          };
+        }
+
+        // Save execution state to database after each step (for non-suspended steps)
         const executionState = (execution as any).state;
         if (executionState && executionState.history) {
           executionState.history.push({
@@ -272,21 +301,6 @@ export class WorkflowOrchestrationEngine {
 
         // Determine next step (orchestration logic only)
         currentStepIndex = this.determineNextStepIndex(steps, step, stepResult, currentStepIndex);
-
-        // Check if workflow should be suspended (e.g., for delays)
-        if (stepResult.metadata?.workflowSuspended) {
-          this.logger.log(`Workflow suspended at step: ${step.id}`);
-          return {
-            success: true,
-            result: stepResult.result,
-            metadata: {
-              ...stepResult.metadata,
-              suspendedAt: step.id,
-              completedSteps,
-              resumeAt: stepResult.metadata.resumeAt
-            }
-          };
-        }
 
       } catch (error) {
         this.logger.error(`Step execution failed: ${step.id} - ${error.message}`);
@@ -327,6 +341,16 @@ export class WorkflowOrchestrationEngine {
    */
   async resumeWorkflowFromDelay(delay: WorkflowDelay): Promise<void> {
     this.logger.log(`Resuming workflow from delay: ${delay.id}`);
+
+    // Double-check delay is still in processing status to prevent race conditions
+    const currentDelay = await this.delayRepository.findOne({
+      where: { id: delay.id, status: 'processing' }
+    });
+
+    if (!currentDelay) {
+      this.logger.warn(`Delay ${delay.id} is no longer in processing status, skipping resume`);
+      return;
+    }
 
     // Update delay status
     delay.status = 'executed';
@@ -430,40 +454,90 @@ export class WorkflowOrchestrationEngine {
       }
     }
 
-    // Find the last completed step (exclude 'final' and 'error' steps)
+    // Find the step to resume from based on the delay
     const history = executionState.history || [];
-    const lastCompletedStep = history.findLast((step: any) =>
-      step.state === 'completed' &&
-      step.stepId !== 'final' &&
-      step.stepId !== 'error'
-    );
+    let resumeFromStepId: string;
+    let resumeFromIndex: number;
 
-    if (!lastCompletedStep) {
-      this.logger.warn(`No completed steps found in execution ${execution.id}, starting from beginning`);
-      // If no completed steps, start from the beginning but continue the existing execution
-      const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
-      await this.updateExecutionStatus(execution, result);
-      return;
+    if (delay) {
+      // Resume from the specific delay step
+      resumeFromStepId = delay.stepId;
+      this.logger.log(`Resuming from delay step: ${resumeFromStepId}`);
+
+      // Find the index of the delay step
+      resumeFromIndex = workflow.steps.findIndex(step => step.id === resumeFromStepId);
+
+      if (resumeFromIndex === -1) {
+        this.logger.warn(`Delay step ${resumeFromStepId} not found in workflow definition, starting from beginning`);
+        // Start from the beginning but continue the existing execution
+        const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
+        await this.updateExecutionStatus(execution, result);
+        return;
+      }
+
+      // Continue from the next step after the delay
+      resumeFromIndex += 1;
+    } else {
+      // Fallback: Find the last completed step (exclude 'final' and 'error' steps)
+      const lastCompletedStep = history.findLast((step: any) =>
+        step.state === 'completed' &&
+        step.stepId !== 'final' &&
+        step.stepId !== 'error'
+      );
+
+      if (!lastCompletedStep) {
+        this.logger.warn(`No completed steps found in execution ${execution.id}, starting from beginning`);
+        // If no completed steps, start from the beginning but continue the existing execution
+        const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
+        await this.updateExecutionStatus(execution, result);
+        return;
+      }
+
+      this.logger.log(`Last completed step: ${lastCompletedStep.stepId}, continuing from next step`);
+      resumeFromStepId = lastCompletedStep.stepId;
+
+      // Find the index of the last completed step
+      resumeFromIndex = workflow.steps.findIndex(step => step.id === resumeFromStepId);
+
+      if (resumeFromIndex === -1) {
+        this.logger.warn(`Last completed step ${resumeFromStepId} not found in workflow definition, starting from beginning`);
+        // Start from the beginning but continue the existing execution
+        const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
+        await this.updateExecutionStatus(execution, result);
+        return;
+      }
+
+      // Continue from the next step
+      resumeFromIndex += 1;
     }
 
-    this.logger.log(`Last completed step: ${lastCompletedStep.stepId}, continuing from next step`);
+    // If resuming from a delay, mark the delay step as completed
+    if (delay) {
+      // Update the delay step state from 'suspended' to 'completed'
+      const delayStepHistory = history.find((step: any) =>
+        step.stepId === delay.stepId && step.state === 'suspended'
+      );
 
-    // Use the workflow definition directly (it's already converted from JsonLogic)
-    const workflowDefinition = workflow;
+      if (delayStepHistory) {
+        delayStepHistory.state = 'completed';
+        delayStepHistory.timestamp = new Date();
+        delayStepHistory.result = {
+          ...delayStepHistory.result,
+          status: 'executed',
+          executedAt: new Date().toISOString()
+        };
+        await this.executionRepository.save(execution);
+        this.logger.log(`Updated delay step ${delay.stepId} from suspended to completed`);
+      }
 
-    // Find the index of the last completed step
-    const lastStepIndex = workflowDefinition.steps.findIndex(step => step.id === lastCompletedStep.stepId);
-
-    if (lastStepIndex === -1) {
-      this.logger.warn(`Last completed step ${lastCompletedStep.stepId} not found in workflow definition, starting from beginning`);
-      // Start from the beginning but continue the existing execution
-      const result = await this.executeWorkflowSteps(workflow, executionState.context, execution);
-      await this.updateExecutionStatus(execution, result);
-      return;
+      // Ensure we skip the delay step completely by adding 1 to resumeFromIndex
+      // This prevents the delay step from being re-executed
+      resumeFromIndex = Math.max(resumeFromIndex, workflow.steps.findIndex(step => step.id === delay.stepId) + 1);
+      this.logger.log(`Adjusted resumeFromIndex to ${resumeFromIndex} to skip delay step ${delay.stepId}`);
     }
 
-    // Continue from the next step
-    const remainingSteps = workflowDefinition.steps.slice(lastStepIndex + 1);
+    // Continue from the determined step
+    const remainingSteps = workflow.steps.slice(resumeFromIndex);
 
     if (remainingSteps.length === 0) {
       this.logger.log(`All steps completed for execution ${execution.id}`);

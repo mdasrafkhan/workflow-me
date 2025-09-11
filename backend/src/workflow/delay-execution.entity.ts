@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 
 @Entity()
 @Index(['executeAt', 'status']) // Index for efficient cron job queries
+@Index(['executionId', 'status']) // Index for execution-based queries
 export class DelayExecution {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -11,6 +12,9 @@ export class DelayExecution {
 
   @Column()
   executionId: string;
+
+  @Column()
+  stepId: string;
 
   @Column()
   userId: string;
@@ -33,10 +37,10 @@ export class DelayExecution {
 
   @Column({
     type: 'enum',
-    enum: ['pending', 'executed', 'cancelled'],
+    enum: ['pending', 'processing', 'executed', 'cancelled', 'failed'],
     default: 'pending'
   })
-  status: 'pending' | 'executed' | 'cancelled';
+  status: 'pending' | 'processing' | 'executed' | 'cancelled' | 'failed';
 
   @Column('jsonb')
   context: any; // User data and workflow context
