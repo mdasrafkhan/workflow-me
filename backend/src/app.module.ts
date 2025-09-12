@@ -15,6 +15,7 @@ import { WorkflowController } from './workflow/workflow.controller';
 import { SubscriptionPurchaseController } from './controllers/subscription-purchase.controller';
 import { WorkflowModule } from './workflow/workflow.module';
 import { TestUtilsModule } from './test-utils/test-utils.module';
+import { WorkflowTriggerModule } from './workflow/triggers/workflow-trigger.module';
 import { SubscriptionPurchaseService } from './services/subscription-purchase.service';
 import { DummyUser } from './database/entities/dummy-user.entity';
 import { DummySubscription } from './database/entities/dummy-subscription.entity';
@@ -69,7 +70,8 @@ import { JsonLogicRule } from './workflow/json-logic-rule.entity';
       JsonLogicRule
     ]),
     WorkflowModule,
-    TestUtilsModule
+    TestUtilsModule,
+    WorkflowTriggerModule
   ],
   controllers: [HealthController, WorkflowController, SubscriptionPurchaseController],
   providers: [

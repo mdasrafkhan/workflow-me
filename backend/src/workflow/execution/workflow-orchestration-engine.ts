@@ -9,6 +9,8 @@ import { WorkflowDefinition, WorkflowStep, WorkflowExecutionContext } from '../t
 import { NodeRegistryService } from '../nodes/registry/node-registry.service';
 import { ExecutionResult } from '../nodes/interfaces/node-executor.interface';
 import { WorkflowExecutionResult } from './types';
+import { WorkflowTriggerRegistryService } from '../triggers/workflow-trigger-registry.service';
+import { WorkflowTriggerContext, WorkflowTriggerExecutionResult } from '../interfaces/workflow-trigger.interface';
 
 /**
  * Clean Workflow Orchestration Engine
@@ -33,7 +35,8 @@ export class WorkflowOrchestrationEngine {
     private readonly delayRepository: Repository<WorkflowDelay>,
     @InjectRepository(JsonLogicRule)
     private readonly jsonLogicRuleRepository: Repository<JsonLogicRule>,
-    private readonly nodeRegistry: NodeRegistryService
+    private readonly nodeRegistry: NodeRegistryService,
+    private readonly triggerRegistry: WorkflowTriggerRegistryService
   ) {}
 
   // ============================================================================
@@ -1267,6 +1270,136 @@ export class WorkflowOrchestrationEngine {
 
   private generateExecutionId(): string {
     return `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // ============================================================================
+  // TRIGGER REGISTRY INTEGRATION (No Business Logic)
+  // ============================================================================
+
+  /**
+   * Execute workflow using trigger registry system
+   * This is the new standardized way to execute workflows from triggers
+   */
+  async executeWorkflowFromTrigger(
+    triggerType: string,
+    triggerData: any
+  ): Promise<WorkflowTriggerExecutionResult> {
+    const startTime = Date.now();
+    this.logger.log(`[Trigger: ${triggerType}] [Step: start] Processing trigger data`);
+
+    try {
+      // Get the trigger implementation
+      const trigger = this.triggerRegistry.getTrigger(triggerType);
+      if (!trigger) {
+        throw new Error(`Trigger type '${triggerType}' is not registered`);
+      }
+
+      // Process the trigger data
+      const triggerResult = await this.triggerRegistry.processTrigger(triggerType, triggerData);
+      if (!triggerResult.success) {
+        throw new Error(`Trigger processing failed: ${triggerResult.error}`);
+      }
+
+      const context = triggerResult.context;
+      this.logger.log(`[Trigger: ${triggerType}] [Step: processed] [executionId:${context.executionId}] [userId:${context.userId}]`);
+
+      // Check if trigger should execute
+      if (!this.triggerRegistry.shouldTriggerExecute(triggerType, context)) {
+        this.logger.log(`[Trigger: ${triggerType}] [Step: skipped] [reason:shouldExecute=false] [userId:${context.userId}]`);
+        return {
+          executionId: context.executionId,
+          workflowId: context.workflowId,
+          triggerType,
+          success: true,
+          context,
+          executionTime: Date.now() - startTime,
+          timestamp: new Date()
+        };
+      }
+
+      // Get workflow ID
+      const workflowId = this.triggerRegistry.getWorkflowIdForTrigger(triggerType, context);
+      if (!workflowId) {
+        throw new Error(`Could not determine workflow ID for trigger: ${triggerType}`);
+      }
+
+      // Get workflow definition
+      const workflow = await this.getWorkflowById(workflowId);
+      if (!workflow) {
+        throw new Error(`Workflow not found: ${workflowId}`);
+      }
+
+      // Convert trigger context to workflow execution context
+      const executionContext: WorkflowExecutionContext = {
+        executionId: context.executionId,
+        workflowId: context.workflowId,
+        triggerType: context.triggerType,
+        triggerId: context.triggerId,
+        userId: context.userId,
+        triggerData: context.entityData.data,
+        data: context.entityData.data,
+        metadata: {
+          ...context.triggerMetadata,
+          ...context.executionMetadata,
+          source: 'trigger-registry',
+          timestamp: context.timestamp
+        },
+        createdAt: context.timestamp
+      };
+
+      // Execute the workflow
+      const result = await this.executeWorkflow(workflow, executionContext);
+
+      const executionTime = Date.now() - startTime;
+      this.logger.log(`[Trigger: ${triggerType}] [Step: complete] [executionId:${context.executionId}] [status:${result.success ? 'success' : 'failed'}] [executionTime:${executionTime}ms]`);
+
+      return {
+        executionId: context.executionId,
+        workflowId: context.workflowId,
+        triggerType,
+        success: result.success,
+        context,
+        error: result.error,
+        executionTime,
+        timestamp: new Date()
+      };
+
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+      this.logger.error(`[Trigger: ${triggerType}] [Step: failed] [error:${error.message}] [executionTime:${executionTime}ms]`);
+
+      return {
+        executionId: `error_${Date.now()}`,
+        workflowId: 'unknown',
+        triggerType,
+        success: false,
+        context: null as any,
+        error: error.message,
+        executionTime,
+        timestamp: new Date()
+      };
+    }
+  }
+
+  /**
+   * Register a trigger with the registry
+   */
+  registerTrigger(trigger: any): void {
+    this.triggerRegistry.register(trigger);
+  }
+
+  /**
+   * Get all registered triggers
+   */
+  getRegisteredTriggers(): any[] {
+    return this.triggerRegistry.getAllTriggers();
+  }
+
+  /**
+   * Get trigger statistics
+   */
+  getTriggerStats(): { totalTriggers: number; triggerTypes: string[] } {
+    return this.triggerRegistry.getStats();
   }
 
   // ============================================================================

@@ -22,13 +22,17 @@ import { EmailService } from '../../services/email.service';
 // Execution Engine
 import { WorkflowExecutionEngine } from '../execution/workflow-execution-engine';
 
+// Trigger Module
+import { WorkflowTriggerModule } from '../triggers/workflow-trigger.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       WorkflowDelay,
       WorkflowExecution,
       EmailLog
-    ])
+    ]),
+    WorkflowTriggerModule
   ],
   providers: [
     // Registry

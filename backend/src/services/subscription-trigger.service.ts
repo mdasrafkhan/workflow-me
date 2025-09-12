@@ -7,10 +7,17 @@ import { DummySubscriptionType } from '../database/entities/dummy-subscription-t
 import { WorkflowExecutionSchedule } from '../database/entities/workflow-execution-schedule.entity';
 import { WorkflowExecutionContext, TriggerData } from '../workflow/types';
 import { VisualWorkflow } from '../workflow/visual-workflow.entity';
+import { WorkflowTrigger, WorkflowTriggerContext, WorkflowTriggerResult } from '../workflow/interfaces/workflow-trigger.interface';
 
 @Injectable()
-export class SubscriptionTriggerService {
+export class SubscriptionTriggerService implements WorkflowTrigger {
   private readonly logger = new Logger(SubscriptionTriggerService.name);
+
+  // WorkflowTrigger interface implementation
+  readonly triggerType = 'subscription_created';
+  readonly version = '1.0.0';
+  readonly name = 'Subscription Created Trigger';
+  readonly description = 'Triggers workflow when a user creates a subscription';
 
   constructor(
     @InjectRepository(DummySubscription)
@@ -24,6 +31,191 @@ export class SubscriptionTriggerService {
     @InjectRepository(VisualWorkflow)
     private readonly workflowRepository: Repository<VisualWorkflow>,
   ) {}
+
+  // ============================================================================
+  // WorkflowTrigger Interface Implementation
+  // ============================================================================
+
+  /**
+   * Validate subscription trigger data
+   */
+  validate(data: any): {
+    isValid: boolean;
+    context?: WorkflowTriggerContext;
+    errors?: string[];
+  } {
+    const errors: string[] = [];
+
+    // Validate required fields
+    if (!data.subscriptionId) {
+      errors.push('subscriptionId is required');
+    }
+    if (!data.userId) {
+      errors.push('userId is required');
+    }
+    if (!data.product) {
+      errors.push('product is required');
+    }
+    if (!data.status) {
+      errors.push('status is required');
+    }
+    if (!data.user) {
+      errors.push('user data is required');
+    }
+    if (!data.user.email) {
+      errors.push('user email is required');
+    }
+
+    if (errors.length > 0) {
+      return { isValid: false, errors };
+    }
+
+    // Create standardized context
+    const context: WorkflowTriggerContext = {
+      executionId: `sub_${data.subscriptionId}_${Date.now()}`,
+      workflowId: this.determineWorkflowId(data.product),
+      triggerType: this.triggerType,
+      triggerId: data.subscriptionId,
+      userId: data.userId,
+      timestamp: new Date(data.createdAt || Date.now()),
+      entityData: {
+        id: data.subscriptionId,
+        type: 'subscription',
+        data: {
+          subscriptionId: data.subscriptionId,
+          product: data.product,
+          product_package: data.product_package || data.product,
+          status: data.status,
+          amount: data.amount,
+          currency: data.currency,
+          user: data.user,
+          subscriptionType: data.subscriptionType,
+          metadata: data.metadata,
+          createdAt: data.createdAt
+        }
+      },
+      triggerMetadata: {
+        source: 'subscription_created',
+        version: this.version,
+        priority: 'high',
+        retryable: true,
+        timeout: 30000 // 30 seconds
+      },
+      executionMetadata: {
+        correlationId: data.correlationId,
+        sessionId: data.sessionId,
+        requestId: data.requestId,
+        tags: ['subscription', 'created', 'user']
+      }
+    };
+
+    return { isValid: true, context };
+  }
+
+  /**
+   * Process subscription trigger data
+   */
+  async process(data: any): Promise<WorkflowTriggerResult> {
+    try {
+      // Validate first
+      const validation = this.validate(data);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          context: null as any,
+          error: `Validation failed: ${validation.errors?.join(', ')}`
+        };
+      }
+
+      // Additional processing logic here (e.g., enrich data, call external APIs)
+      const enrichedData = await this.enrichSubscriptionData(validation.context!);
+
+      return {
+        success: true,
+        context: enrichedData,
+        metadata: {
+          processedAt: new Date().toISOString(),
+          enrichmentApplied: true
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        context: null as any,
+        error: `Processing failed: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Get workflow ID for subscription
+   */
+  getWorkflowId(context: WorkflowTriggerContext): string {
+    const product = context.entityData.data.product;
+    return this.determineWorkflowId(product);
+  }
+
+  /**
+   * Check if this trigger should execute
+   */
+  shouldExecute(context: WorkflowTriggerContext): boolean {
+    const subscriptionData = context.entityData.data;
+
+    // Only execute for active subscriptions
+    if (subscriptionData.status !== 'active') {
+      return false;
+    }
+
+    // Only execute if user is active
+    if (!subscriptionData.user.isActive) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Enrich subscription data with additional information
+   */
+  private async enrichSubscriptionData(context: WorkflowTriggerContext): Promise<WorkflowTriggerContext> {
+    // Example: Add enriched data here
+    const enrichedData = {
+      ...context.entityData.data,
+      enrichedAt: new Date().toISOString(),
+      riskScore: this.calculateRiskScore(context.entityData.data),
+      userSegment: this.determineUserSegment(context.entityData.data)
+    };
+
+    return {
+      ...context,
+      entityData: {
+        ...context.entityData,
+        data: enrichedData
+      }
+    };
+  }
+
+  private calculateRiskScore(subscriptionData: any): number {
+    // Simple risk scoring
+    let score = 0;
+
+    if (subscriptionData.user.phoneNumber) score += 10;
+    if (subscriptionData.amount > 0) score += 20;
+    if (subscriptionData.subscriptionType?.features?.length > 0) score += 5;
+
+    return Math.min(score, 100);
+  }
+
+  private determineUserSegment(subscriptionData: any): string {
+    // Simple segmentation logic
+    if (subscriptionData.product === 'premium') {
+      return 'premium';
+    } else if (subscriptionData.amount > 50) {
+      return 'high_value';
+    } else {
+      return 'standard';
+    }
+  }
 
   /**
    * Look up workflow by name and return the actual workflow ID

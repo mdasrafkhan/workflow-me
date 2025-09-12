@@ -7,19 +7,172 @@ import {
   WorkflowExecutionContext,
   WorkflowExecution
 } from '../interfaces/node-executor.interface';
+import {
+  BusinessConditionNode,
+  ConditionEvaluationResult,
+  BusinessConditionConfig
+} from '../../interfaces/condition-node.interface';
 
 /**
- * Condition Node Executor
- * Handles conditional logic in workflows
+ * Business Condition Node Executor
+ * Handles business-specific conditional logic in workflows
+ * Supports multiple business domains and condition types
  */
 @Injectable()
-export class ConditionNodeExecutor extends BaseNodeExecutor {
+export class ConditionNodeExecutor extends BaseNodeExecutor implements BusinessConditionNode {
   getNodeType(): string {
     return 'condition';
   }
 
   getDependencies(): string[] {
     return [];
+  }
+
+  // ============================================================================
+  // BUSINESS CONDITION NODE INTERFACE IMPLEMENTATION
+  // ============================================================================
+
+  getBusinessDomain(): string {
+    return 'general'; // Default domain, can be overridden by specific condition types
+  }
+
+  getConditionType(): string {
+    return 'multi_domain'; // Supports multiple condition types
+  }
+
+  async evaluateBusinessCondition(
+    step: WorkflowStep,
+    context: WorkflowExecutionContext,
+    execution: WorkflowExecution
+  ): Promise<ConditionEvaluationResult> {
+    try {
+      const conditionData = step.data;
+      let conditionResult: boolean;
+      let matchedBranch: any = null;
+      let extractedActions: any[] = [];
+
+      // Handle if-else structure with JsonLogic
+      if (conditionData.if && Array.isArray(conditionData.if)) {
+        // Find which condition branch matches and extract its actions
+        matchedBranch = this.findMatchingIfBranch(conditionData.if, context.data);
+
+        if (matchedBranch) {
+          conditionResult = true;
+          this.logger.log(`If-else condition matched branch with actions`);
+
+          // Extract actions from the matching branch to be executed next
+          extractedActions = this.extractActionsFromBranch(matchedBranch);
+          this.logger.log(`Extracted ${extractedActions.length} actions from matching branch`);
+        } else {
+          conditionResult = false;
+          this.logger.log(`If-else condition: no matching branch found`);
+        }
+      } else {
+        // Handle single condition evaluation
+        conditionResult = this.evaluateCondition(
+          conditionData.conditionType,
+          conditionData.conditionValue,
+          conditionData.operator,
+          context.data
+        );
+      }
+
+      return {
+        success: true,
+        result: conditionResult,
+        matchedBranch,
+        extractedActions,
+        businessContext: {
+          domain: this.getBusinessDomain(),
+          conditionType: this.getConditionType(),
+          evaluatedAt: new Date().toISOString()
+        },
+        metadata: {
+          conditionPassed: conditionResult,
+          actionsToExecute: extractedActions.length
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        result: false,
+        error: `Business condition evaluation failed: ${error.message}`,
+        businessContext: {
+          domain: this.getBusinessDomain(),
+          conditionType: this.getConditionType(),
+          error: error.message
+        }
+      };
+    }
+  }
+
+  getSupportedOperators(): string[] {
+    return [
+      'equals',
+      'not_equals',
+      'contains',
+      'not_contains',
+      'greater_than',
+      'less_than',
+      'greater_than_or_equal',
+      'less_than_or_equal',
+      'in',
+      'not_in',
+      'starts_with',
+      'ends_with',
+      'regex',
+      'is_null',
+      'is_not_null',
+      'is_empty',
+      'is_not_empty'
+    ];
+  }
+
+  getConditionSchema(): object {
+    return {
+      type: 'object',
+      properties: {
+        conditionType: {
+          type: 'string',
+          enum: [
+            'product_package',
+            'user_segment',
+            'subscription_status',
+            'email_domain',
+            'custom_field',
+            'user_condition',
+            'business_rule',
+            'payment_method',
+            'user_preferences',
+            'subscription_tier',
+            'user_activity',
+            'geographic_location',
+            'device_type',
+            'browser_type',
+            'time_based',
+            'frequency_based'
+          ]
+        },
+        operator: {
+          type: 'string',
+          enum: this.getSupportedOperators()
+        },
+        conditionValue: {
+          type: 'object',
+          description: 'Value to compare against, structure depends on conditionType'
+        },
+        businessRules: {
+          type: 'object',
+          description: 'Additional business-specific rules and configurations'
+        },
+        fallbackActions: {
+          type: 'array',
+          description: 'Actions to execute if condition fails'
+        }
+      },
+      required: ['conditionType', 'operator', 'conditionValue']
+    };
   }
 
   async execute(
@@ -30,63 +183,64 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
     this.logExecutionStart(step, context);
 
     try {
-      const conditionData = step.data;
-      let conditionResult: boolean;
+      // Use the new business condition evaluation
+      const conditionResult = await this.evaluateBusinessCondition(step, context, execution);
 
-      // Handle if-else structure with JsonLogic
-      if (conditionData.if && Array.isArray(conditionData.if)) {
-        // Find which condition branch matches and extract its actions
-        const matchingBranch = this.findMatchingIfBranch(conditionData.if, context.data);
-
-        if (matchingBranch) {
-          conditionResult = true;
-          this.logger.log(`If-else condition matched branch with actions`);
-
-          // Extract actions from the matching branch to be executed next
-          const actions = this.extractActionsFromBranch(matchingBranch);
-          this.logger.log(`Extracted ${actions.length} actions from matching branch`);
-
-          // Return the actions as the result so they can be executed
-          const result = this.createSuccessResult(
-            {
-              conditionResult: true,
-              matchedBranch: matchingBranch,
-              extractedActions: actions,
-              evaluatedAt: new Date().toISOString()
-            },
-            [], // No next steps - actions will be handled by orchestration engine
-            {
-              conditionPassed: true,
-              actionsToExecute: actions
-            }
-          );
-
-          this.logExecutionEnd(step, result);
-          return result;
-        } else {
-          conditionResult = false;
-          this.logger.log(`If-else condition: no matching branch found`);
-        }
-      } else {
-        throw new Error('Only if-else structures are supported');
+      if (!conditionResult.success) {
+        return this.createErrorResult(
+          conditionResult.error || 'Business condition evaluation failed',
+          {
+            stepId: step.id,
+            conditionType: step.data?.conditionType,
+            businessDomain: this.getBusinessDomain(),
+            error: conditionResult.error
+          }
+        );
       }
 
-      // Determine next steps based on condition result
-      const nextSteps = this.determineNextSteps(step, conditionResult);
+      // Handle if-else structure with extracted actions
+      if (conditionResult.extractedActions && conditionResult.extractedActions.length > 0) {
+        // Return the actions as the result so they can be executed
+        const result = this.createSuccessResult(
+          {
+            conditionResult: conditionResult.result,
+            matchedBranch: conditionResult.matchedBranch,
+            extractedActions: conditionResult.extractedActions,
+            businessContext: conditionResult.businessContext,
+            evaluatedAt: new Date().toISOString()
+          },
+          [], // No next steps - actions will be handled by orchestration engine
+          {
+            conditionPassed: conditionResult.result,
+            actionsToExecute: conditionResult.extractedActions,
+            businessDomain: this.getBusinessDomain(),
+            conditionType: this.getConditionType()
+          }
+        );
+
+        this.logExecutionEnd(step, result);
+        return result;
+      }
+
+      // Handle single condition evaluation
+      const nextSteps = this.determineNextSteps(step, conditionResult.result);
 
       const result = this.createSuccessResult(
         {
-          conditionType: conditionData.conditionType,
-          conditionValue: conditionData.conditionValue,
-          operator: conditionData.operator,
-          customCondition: conditionData.condition,
-          result: conditionResult,
+          conditionType: step.data?.conditionType,
+          conditionValue: step.data?.conditionValue,
+          operator: step.data?.operator,
+          customCondition: step.data?.condition,
+          result: conditionResult.result,
+          businessContext: conditionResult.businessContext,
           evaluatedAt: new Date().toISOString()
         },
         nextSteps,
         {
-          conditionPassed: conditionResult,
-          nextSteps
+          conditionPassed: conditionResult.result,
+          nextSteps,
+          businessDomain: this.getBusinessDomain(),
+          conditionType: this.getConditionType()
         }
       );
 
@@ -95,10 +249,11 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
 
     } catch (error) {
       const result = this.createErrorResult(
-        `Condition evaluation failed: ${error.message}`,
+        `Business condition execution failed: ${error.message}`,
         {
           stepId: step.id,
           conditionType: step.data?.conditionType,
+          businessDomain: this.getBusinessDomain(),
           error: error.message
         }
       );
@@ -113,24 +268,143 @@ export class ConditionNodeExecutor extends BaseNodeExecutor {
     const errors = [...baseValidation.errors];
     const warnings = [...baseValidation.warnings];
 
-    console.log(`[DEBUG] Condition validation - step data:`, JSON.stringify(step.data, null, 2));
 
-    // Validate condition-specific properties
-    // Only check for if-else structure (which should be handled by JsonLogic execution)
-    const hasIfElseStructure = step.data?.if && Array.isArray(step.data.if);
+    const conditionData = step.data;
+    const schema = this.getConditionSchema() as any;
 
-    console.log(`[DEBUG] hasIfElseStructure: ${hasIfElseStructure}`);
+    // Check for if-else structure (JsonLogic)
+    const hasIfElseStructure = conditionData?.if && Array.isArray(conditionData.if);
 
-    if (!hasIfElseStructure) {
-      errors.push('If-else structure is required');
+    // Check for single condition structure
+    const hasSingleCondition = conditionData?.conditionType && conditionData?.operator && conditionData?.conditionValue;
+
+    console.log(`[DEBUG] hasIfElseStructure: ${hasIfElseStructure}, hasSingleCondition: ${hasSingleCondition}`);
+
+    if (!hasIfElseStructure && !hasSingleCondition) {
+      errors.push('Either if-else structure or single condition (conditionType, operator, conditionValue) is required');
     }
 
+    // Validate single condition structure if present
+    if (hasSingleCondition) {
+      // Validate conditionType
+      if (conditionData.conditionType && !schema.properties.conditionType.enum.includes(conditionData.conditionType)) {
+        errors.push(`Invalid conditionType: ${conditionData.conditionType}. Must be one of: ${schema.properties.conditionType.enum.join(', ')}`);
+      }
+
+      // Validate operator
+      if (conditionData.operator && !this.getSupportedOperators().includes(conditionData.operator)) {
+        errors.push(`Invalid operator: ${conditionData.operator}. Must be one of: ${this.getSupportedOperators().join(', ')}`);
+      }
+
+      // Validate conditionValue exists
+      if (!conditionData.conditionValue) {
+        errors.push('conditionValue is required for single condition structure');
+      }
+
+      // Business-specific validation based on conditionType
+      if (conditionData.conditionType) {
+        const businessValidation = this.validateBusinessCondition(conditionData);
+        errors.push(...businessValidation.errors);
+        warnings.push(...businessValidation.warnings);
+      }
+    }
+
+    // Validate if-else structure
+    if (hasIfElseStructure) {
+      if (!Array.isArray(conditionData.if) || conditionData.if.length < 2) {
+        errors.push('If-else structure must have at least 2 elements (condition, actions)');
+      }
+    }
 
     return {
       isValid: errors.length === 0,
       errors,
       warnings
     };
+  }
+
+  /**
+   * Validate business-specific condition logic
+   */
+  private validateBusinessCondition(conditionData: any): { errors: string[]; warnings: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    const { conditionType, operator, conditionValue } = conditionData;
+
+    // Business-specific validation rules
+    switch (conditionType) {
+      case 'product_package':
+        if (operator === 'in' && (!Array.isArray(conditionValue) || conditionValue.length === 0)) {
+          errors.push('product_package with "in" operator requires non-empty array of package values');
+        }
+        break;
+
+      case 'user_segment':
+        if (operator === 'equals' && typeof conditionValue !== 'string') {
+          errors.push('user_segment with "equals" operator requires string value');
+        }
+        break;
+
+      case 'subscription_status':
+        const validStatuses = ['active', 'inactive', 'pending', 'cancelled', 'expired'];
+        if (operator === 'equals' && !validStatuses.includes(conditionValue)) {
+          errors.push(`subscription_status with "equals" operator requires one of: ${validStatuses.join(', ')}`);
+        }
+        break;
+
+      case 'email_domain':
+        if (operator === 'equals' && !this.isValidEmailDomain(conditionValue)) {
+          warnings.push('email_domain value should be a valid domain format');
+        }
+        break;
+
+      case 'user_condition':
+        if (!conditionValue.field || !conditionValue.value) {
+          errors.push('user_condition requires both field and value properties');
+        }
+        break;
+
+      case 'payment_method':
+        const validPaymentMethods = ['credit_card', 'debit_card', 'paypal', 'stripe', 'bank_transfer'];
+        if (operator === 'equals' && !validPaymentMethods.includes(conditionValue)) {
+          errors.push(`payment_method with "equals" operator requires one of: ${validPaymentMethods.join(', ')}`);
+        }
+        break;
+
+      case 'time_based':
+        if (!this.isValidTimeCondition(conditionValue)) {
+          errors.push('time_based condition requires valid time configuration');
+        }
+        break;
+
+      case 'frequency_based':
+        if (!this.isValidFrequencyCondition(conditionValue)) {
+          errors.push('frequency_based condition requires valid frequency configuration');
+        }
+        break;
+    }
+
+    return { errors, warnings };
+  }
+
+  private isValidEmailDomain(domain: string): boolean {
+    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.([a-zA-Z]{2,})$/;
+    return domainRegex.test(domain);
+  }
+
+  private isValidTimeCondition(timeValue: any): boolean {
+    if (typeof timeValue === 'object' && timeValue !== null) {
+      return timeValue.hour !== undefined && timeValue.minute !== undefined;
+    }
+    return false;
+  }
+
+  private isValidFrequencyCondition(freqValue: any): boolean {
+    if (typeof freqValue === 'object' && freqValue !== null) {
+      return freqValue.interval !== undefined && freqValue.count !== undefined;
+    }
+    return false;
   }
 
   private evaluateCondition(

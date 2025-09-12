@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import * as Handlebars from 'handlebars';
 import { EmailActionData, EmailStatus } from '../workflow/types';
+import { WorkflowTriggerRegistryService } from '../workflow/triggers/workflow-trigger-registry.service';
 
 @Injectable()
 export class EmailService {
@@ -9,7 +10,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
   private templates = new Map<string, HandlebarsTemplateDelegate>();
 
-  constructor() {
+  constructor(private readonly triggerRegistry: WorkflowTriggerRegistryService) {
     this.initializeTransporter();
     this.initializeTemplates();
   }
@@ -358,5 +359,45 @@ export class EmailService {
   async getEmailsForExecution(executionId: string): Promise<any[]> {
     this.logger.log(`📧 [EXTERNAL EMAIL SERVICE] Requesting emails for execution: ${executionId}`);
     return []; // External service - no local storage
+  }
+
+  /**
+   * Execute workflow through trigger registry (ONLY way to execute workflows)
+   * This method enforces the use of the standardized trigger system
+   */
+  async executeWorkflowThroughTrigger(
+    triggerType: string,
+    triggerData: any
+  ): Promise<any> {
+    this.logger.log(`[EmailService] Executing workflow through trigger: ${triggerType}`);
+
+    // Validate trigger is registered
+    if (!this.triggerRegistry.isRegistered(triggerType)) {
+      throw new Error(`Trigger type '${triggerType}' is not registered. Use trigger registry to register triggers.`);
+    }
+
+    // Process trigger through registry
+    const result = await this.triggerRegistry.processTrigger(triggerType, triggerData);
+
+    if (!result.success) {
+      throw new Error(`Trigger processing failed: ${result.error}`);
+    }
+
+    this.logger.log(`[EmailService] Workflow executed successfully through trigger: ${triggerType}`);
+    return result;
+  }
+
+  /**
+   * Get available trigger types (ONLY way to discover available workflows)
+   */
+  getAvailableTriggerTypes(): string[] {
+    return this.triggerRegistry.getAllTriggers().map(trigger => trigger.triggerType);
+  }
+
+  /**
+   * Get trigger statistics
+   */
+  getTriggerStatistics(): { totalTriggers: number; triggerTypes: string[] } {
+    return this.triggerRegistry.getStats();
   }
 }

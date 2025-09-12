@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { DummySubscription } from '../database/entities/dummy-subscription.entity';
 import { DummyUser } from '../database/entities/dummy-user.entity';
 import { DummySubscriptionType } from '../database/entities/dummy-subscription-type.entity';
+import { WorkflowTriggerRegistryService } from '../workflow/triggers/workflow-trigger-registry.service';
 
 export interface CreateSubscriptionRequest {
   userId: string;
@@ -45,6 +46,7 @@ export class SubscriptionPurchaseService {
     private readonly userRepository: Repository<DummyUser>,
     @InjectRepository(DummySubscriptionType)
     private readonly subscriptionTypeRepository: Repository<DummySubscriptionType>,
+    private readonly triggerRegistry: WorkflowTriggerRegistryService
   ) {}
 
   /**
@@ -113,6 +115,9 @@ export class SubscriptionPurchaseService {
     const savedSubscription = await this.subscriptionRepository.save(subscription);
 
     this.logger.log(`Successfully created subscription ${savedSubscription.id} for user ${request.userId}`);
+
+    // Trigger workflow execution through the standardized trigger system
+    await this.triggerWorkflowExecution(savedSubscription, subscriptionType);
 
     return {
       id: savedSubscription.id,
@@ -308,5 +313,73 @@ export class SubscriptionPurchaseService {
       default:
         return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days
     }
+  }
+
+  /**
+   * Trigger workflow execution through the standardized trigger system
+   * This is the ONLY way to execute workflows from this service
+   */
+  private async triggerWorkflowExecution(
+    subscription: DummySubscription,
+    subscriptionType: DummySubscriptionType
+  ): Promise<void> {
+    try {
+      this.logger.log(`[SubscriptionPurchase] Triggering workflow for subscription: ${subscription.id}`);
+
+      // Prepare trigger data in the standardized format
+      const triggerData = {
+        subscriptionId: subscription.id,
+        userId: subscription.userId,
+        product: subscription.product,
+        product_package: subscription.product,
+        status: subscription.status,
+        amount: subscription.amount,
+        currency: subscription.currency,
+        user: {
+          id: subscription.userId,
+          email: '', // Will be populated by the trigger
+          name: '',
+          phoneNumber: '',
+          timezone: 'UTC'
+        },
+        subscriptionType: {
+          id: subscriptionType.id,
+          name: subscriptionType.name,
+          displayName: subscriptionType.displayName,
+          price: subscriptionType.price,
+          billingCycle: subscriptionType.billingCycle,
+          features: subscriptionType.features
+        },
+        metadata: subscription.metadata,
+        createdAt: subscription.createdAt
+      };
+
+      // Execute workflow through trigger registry
+      const result = await this.triggerRegistry.processTrigger('subscription_created', triggerData);
+
+      if (!result.success) {
+        this.logger.error(`[SubscriptionPurchase] Workflow execution failed: ${result.error}`);
+        // Don't throw error - subscription creation should succeed even if workflow fails
+      } else {
+        this.logger.log(`[SubscriptionPurchase] Workflow executed successfully for subscription: ${subscription.id}`);
+      }
+    } catch (error) {
+      this.logger.error(`[SubscriptionPurchase] Error triggering workflow: ${error.message}`);
+      // Don't throw error - subscription creation should succeed even if workflow fails
+    }
+  }
+
+  /**
+   * Get available trigger types (ONLY way to discover available workflows)
+   */
+  getAvailableTriggerTypes(): string[] {
+    return this.triggerRegistry.getAllTriggers().map(trigger => trigger.triggerType);
+  }
+
+  /**
+   * Get trigger statistics
+   */
+  getTriggerStatistics(): { totalTriggers: number; triggerTypes: string[] } {
+    return this.triggerRegistry.getStats();
   }
 }

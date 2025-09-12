@@ -4,10 +4,17 @@ import { Repository } from 'typeorm';
 import { DummyNewsletter } from '../database/entities/dummy-newsletter.entity';
 import { DummyUser } from '../database/entities/dummy-user.entity';
 import { WorkflowExecutionContext, TriggerData } from '../workflow/types';
+import { WorkflowTrigger, WorkflowTriggerContext, WorkflowTriggerResult } from '../workflow/interfaces/workflow-trigger.interface';
 
 @Injectable()
-export class NewsletterTriggerService {
+export class NewsletterTriggerService implements WorkflowTrigger {
   private readonly logger = new Logger(NewsletterTriggerService.name);
+
+  // WorkflowTrigger interface implementation
+  readonly triggerType = 'newsletter_subscribed';
+  readonly version = '1.0.0';
+  readonly name = 'Newsletter Subscribed Trigger';
+  readonly description = 'Triggers workflow when a user subscribes to newsletter';
 
   constructor(
     @InjectRepository(DummyNewsletter)
@@ -15,6 +22,200 @@ export class NewsletterTriggerService {
     @InjectRepository(DummyUser)
     private readonly userRepository: Repository<DummyUser>,
   ) {}
+
+  // ============================================================================
+  // WorkflowTrigger Interface Implementation
+  // ============================================================================
+
+  /**
+   * Validate newsletter trigger data
+   */
+  validate(data: any): {
+    isValid: boolean;
+    context?: WorkflowTriggerContext;
+    errors?: string[];
+  } {
+    const errors: string[] = [];
+
+    // Validate required fields
+    if (!data.newsletterId) {
+      errors.push('newsletterId is required');
+    }
+    if (!data.userId) {
+      errors.push('userId is required');
+    }
+    if (!data.email) {
+      errors.push('email is required');
+    }
+    if (!data.status) {
+      errors.push('status is required');
+    }
+
+    if (errors.length > 0) {
+      return { isValid: false, errors };
+    }
+
+    // Create standardized context
+    const context: WorkflowTriggerContext = {
+      executionId: `news_${data.newsletterId}_${Date.now()}`,
+      workflowId: 'newsletter-welcome-workflow', // This will be determined by getWorkflowId
+      triggerType: this.triggerType,
+      triggerId: data.newsletterId,
+      userId: data.userId,
+      timestamp: new Date(data.subscribedAt || Date.now()),
+      entityData: {
+        id: data.newsletterId,
+        type: 'event',
+        data: {
+          newsletterId: data.newsletterId,
+          email: data.email,
+          status: data.status,
+          emailVerified: data.emailVerified,
+          source: data.source,
+          preferences: data.preferences,
+          user: data.user,
+          metadata: data.metadata,
+          subscribedAt: data.subscribedAt
+        }
+      },
+      triggerMetadata: {
+        source: 'newsletter_subscribed',
+        version: this.version,
+        priority: 'normal',
+        retryable: true,
+        timeout: 30000 // 30 seconds
+      },
+      executionMetadata: {
+        correlationId: data.correlationId,
+        sessionId: data.sessionId,
+        requestId: data.requestId,
+        tags: ['newsletter', 'subscribed', 'email']
+      }
+    };
+
+    return { isValid: true, context };
+  }
+
+  /**
+   * Process newsletter trigger data
+   */
+  async process(data: any): Promise<WorkflowTriggerResult> {
+    try {
+      // Validate first
+      const validation = this.validate(data);
+      if (!validation.isValid) {
+        return {
+          success: false,
+          context: null as any,
+          error: `Validation failed: ${validation.errors?.join(', ')}`
+        };
+      }
+
+      // Additional processing logic here (e.g., enrich data, call external APIs)
+      const enrichedData = await this.enrichNewsletterData(validation.context!);
+
+      return {
+        success: true,
+        context: enrichedData,
+        metadata: {
+          processedAt: new Date().toISOString(),
+          enrichmentApplied: true
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        context: null as any,
+        error: `Processing failed: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Get workflow ID for newsletter
+   */
+  getWorkflowId(context: WorkflowTriggerContext): string {
+    // Determine workflow based on newsletter data or business rules
+    const newsletterData = context.entityData.data;
+
+    // Example: Different workflows based on source or preferences
+    if (newsletterData.source === 'mobile_app') {
+      return 'mobile-newsletter-welcome-workflow';
+    } else if (newsletterData.preferences?.frequency === 'daily') {
+      return 'daily-newsletter-welcome-workflow';
+    } else {
+      return 'standard-newsletter-welcome-workflow';
+    }
+  }
+
+  /**
+   * Check if this trigger should execute
+   */
+  shouldExecute(context: WorkflowTriggerContext): boolean {
+    const newsletterData = context.entityData.data;
+
+    // Only execute for subscribed newsletters
+    if (newsletterData.status !== 'subscribed') {
+      return false;
+    }
+
+    // Only execute if email is verified
+    if (!newsletterData.emailVerified) {
+      return false;
+    }
+
+    // Skip if user is from a blocked domain
+    const blockedDomains = ['tempmail.com', '10minutemail.com'];
+    const emailDomain = newsletterData.email.split('@')[1];
+    if (blockedDomains.includes(emailDomain)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Enrich newsletter data with additional information
+   */
+  private async enrichNewsletterData(context: WorkflowTriggerContext): Promise<WorkflowTriggerContext> {
+    // Example: Add enriched data here
+    const enrichedData = {
+      ...context.entityData.data,
+      enrichedAt: new Date().toISOString(),
+      userSegment: this.determineUserSegment(context.entityData.data),
+      riskScore: this.calculateRiskScore(context.entityData.data)
+    };
+
+    return {
+      ...context,
+      entityData: {
+        ...context.entityData,
+        data: enrichedData
+      }
+    };
+  }
+
+  private determineUserSegment(newsletterData: any): string {
+    // Simple segmentation logic
+    if (newsletterData.preferences?.frequency === 'daily') {
+      return 'high_engagement';
+    } else if (newsletterData.preferences?.categories?.length > 2) {
+      return 'diverse_interests';
+    } else {
+      return 'standard';
+    }
+  }
+
+  private calculateRiskScore(newsletterData: any): number {
+    // Simple risk scoring
+    let score = 0;
+
+    if (newsletterData.emailVerified) score += 20; // Email verification
+    if (newsletterData.preferences?.language === 'en') score += 10; // English preference
+    if (newsletterData.source === 'website') score += 5; // Website source
+
+    return Math.min(score, 100);
+  }
 
   /**
    * Retrieve all new newsletter subscriptions that need workflow processing

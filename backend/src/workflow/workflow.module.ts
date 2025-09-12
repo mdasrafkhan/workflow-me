@@ -24,6 +24,7 @@ import { WorkflowExecutionSchedule } from '../database/entities/workflow-executi
 import { DummyDataService } from '../services/dummy-data.service';
 import { WorkflowStateMachineService } from './state-machine/workflow-state-machine';
 import { NodesModule } from './nodes/nodes.module';
+import { WorkflowTriggerModule } from './triggers/workflow-trigger.module';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { NodesModule } from './nodes/nodes.module';
       WorkflowDelay,
       WorkflowExecutionSchedule
     ]),
-    NodesModule // Import the new nodes module
+    NodesModule, // Import the new nodes module
+    WorkflowTriggerModule // Import trigger module for services
   ],
   providers: [
     WorkflowService,

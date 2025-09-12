@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { WorkflowOrchestrationEngine } from './workflow-orchestration-engine';
 import { NodeRegistryService } from '../nodes/registry/node-registry.service';
+import { WorkflowTriggerRegistryService } from '../triggers/workflow-trigger-registry.service';
 import { WorkflowExecution } from '../../database/entities/workflow-execution.entity';
 import { WorkflowDelay } from '../../database/entities/workflow-delay.entity';
 import { JsonLogicRule } from '../json-logic-rule.entity';
@@ -13,6 +14,7 @@ describe('WorkflowOrchestrationEngine', () => {
   let delayRepository: Repository<WorkflowDelay>;
   let jsonLogicRuleRepository: Repository<JsonLogicRule>;
   let nodeRegistry: NodeRegistryService;
+  let triggerRegistry: WorkflowTriggerRegistryService;
 
   // Mock workflow with multiple delays
   const mockWorkflowWithMultipleDelays = {
@@ -64,6 +66,20 @@ describe('WorkflowOrchestrationEngine', () => {
           }
         },
         {
+          provide: WorkflowTriggerRegistryService,
+          useValue: {
+            register: jest.fn(),
+            getTrigger: jest.fn(),
+            processTrigger: jest.fn(),
+            getWorkflowIdForTrigger: jest.fn(),
+            shouldTriggerExecute: jest.fn(),
+            isRegistered: jest.fn(),
+            getAllTriggers: jest.fn(),
+            getStats: jest.fn(),
+            validateTriggerData: jest.fn()
+          }
+        },
+        {
           provide: getRepositoryToken(WorkflowExecution),
           useValue: {
             save: jest.fn(),
@@ -97,6 +113,7 @@ describe('WorkflowOrchestrationEngine', () => {
     delayRepository = module.get<Repository<WorkflowDelay>>(getRepositoryToken(WorkflowDelay));
     jsonLogicRuleRepository = module.get<Repository<JsonLogicRule>>(getRepositoryToken(JsonLogicRule));
     nodeRegistry = module.get<NodeRegistryService>(NodeRegistryService);
+    triggerRegistry = module.get<WorkflowTriggerRegistryService>(WorkflowTriggerRegistryService);
   });
 
   describe('Multiple Delays Bug Fix Tests', () => {
@@ -337,12 +354,12 @@ describe('WorkflowOrchestrationEngine', () => {
 
       // Mock getExecutor to return appropriate executors
       jest.spyOn(nodeRegistry, 'getExecutor')
-        .mockReturnValueOnce(mockActionExecutor) // step_2 (send_email)
-        .mockReturnValueOnce(mockDelayExecutor) // step_3 (delay)
-        .mockReturnValueOnce(mockActionExecutor) // step_4 (send_email)
-        .mockReturnValueOnce(mockDelayExecutor) // step_5 (delay)
-        .mockReturnValueOnce(mockActionExecutor) // step_6 (send_email)
-        .mockReturnValueOnce(mockEndExecutor);   // step_7 (end)
+        .mockReturnValueOnce(mockActionExecutor as any) // step_2 (send_email)
+        .mockReturnValueOnce(mockDelayExecutor as any) // step_3 (delay)
+        .mockReturnValueOnce(mockActionExecutor as any) // step_4 (send_email)
+        .mockReturnValueOnce(mockDelayExecutor as any) // step_5 (delay)
+        .mockReturnValueOnce(mockActionExecutor as any) // step_6 (send_email)
+        .mockReturnValueOnce(mockEndExecutor as any);   // step_7 (end)
 
       // Act - Resume workflow from first delay
       await engine.resumeWorkflowFromDelay(mockDelay);
@@ -707,59 +724,341 @@ describe('WorkflowOrchestrationEngine', () => {
     });
   });
 
-  describe('Condition Handling Tests', () => {
-    it('should handle user condition nodes', () => {
-      const userCondition = {
-        type: 'user_condition',
-        field: 'user.preferences.notifications',
-        operator: 'equals',
-        value: true
-      };
+  describe('Business Condition Node Tests', () => {
+    let conditionExecutor: any;
 
-      expect(userCondition.type).toBe('user_condition');
-      expect(userCondition.field).toBe('user.preferences.notifications');
-      expect(userCondition.operator).toBe('equals');
-    });
-
-    it('should handle subscription condition nodes', () => {
-      const subscriptionCondition = {
-        type: 'subscription_condition',
-        field: 'subscription.status',
-        operator: 'in',
-        value: ['active', 'trial']
-      };
-
-      expect(subscriptionCondition.type).toBe('subscription_condition');
-      expect(subscriptionCondition.field).toBe('subscription.status');
-      expect(subscriptionCondition.value).toEqual(['active', 'trial']);
-    });
-
-    it('should handle generic condition nodes with if-else structure', () => {
-      const genericCondition = {
-        type: 'condition',
-        if: [
-          {
-            condition: { "==": [{ "var": "user.preferences.notifications" }, true] },
-            then: [{ type: 'action', data: { actionType: 'send_email' } }]
+    beforeEach(() => {
+      // Mock the condition executor with new business condition interface
+      conditionExecutor = {
+        getNodeType: jest.fn().mockReturnValue('condition'),
+        getDependencies: jest.fn().mockReturnValue([]),
+        getBusinessDomain: jest.fn().mockReturnValue('general'),
+        getConditionType: jest.fn().mockReturnValue('multi_domain'),
+        getSupportedOperators: jest.fn().mockReturnValue([
+          'equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than',
+          'greater_than_or_equal', 'less_than_or_equal', 'in', 'not_in', 'starts_with',
+          'ends_with', 'regex', 'is_null', 'is_not_null', 'is_empty', 'is_not_empty'
+        ]),
+        getConditionSchema: jest.fn().mockReturnValue({
+          type: 'object',
+          properties: {
+            conditionType: {
+              type: 'string',
+              enum: [
+                'product_package', 'user_segment', 'subscription_status', 'email_domain',
+                'custom_field', 'user_condition', 'business_rule', 'payment_method',
+                'user_preferences', 'subscription_tier', 'user_activity', 'geographic_location',
+                'device_type', 'browser_type', 'time_based', 'frequency_based'
+              ]
+            },
+            operator: { type: 'string' },
+            conditionValue: { type: 'object' }
           },
-          {
-            condition: { "==": [{ "var": "user.preferences.notifications" }, false] },
-            then: [{ type: 'action', data: { actionType: 'skip_notification' } }]
-          }
-        ]
+          required: ['conditionType', 'operator', 'conditionValue']
+        }),
+        evaluateBusinessCondition: jest.fn(),
+        execute: jest.fn(),
+        validate: jest.fn()
       };
-
-      expect(genericCondition.type).toBe('condition');
-      expect(genericCondition.if).toBeInstanceOf(Array);
-      expect(genericCondition.if).toHaveLength(2);
     });
 
-    it('should validate condition operators', () => {
-      const operators = ['equals', 'not_equals', 'greater_than', 'less_than', 'in', 'not_in', 'contains'];
+    it('should implement BusinessConditionNode interface correctly', () => {
+      expect(conditionExecutor.getNodeType()).toBe('condition');
+      expect(conditionExecutor.getBusinessDomain()).toBe('general');
+      expect(conditionExecutor.getConditionType()).toBe('multi_domain');
+      expect(conditionExecutor.getSupportedOperators()).toHaveLength(17);
+      expect(conditionExecutor.getConditionSchema()).toBeDefined();
+    });
 
-      operators.forEach(op => {
-        expect(op).toMatch(/^(equals|not_equals|greater_than|less_than|in|not_in|contains)$/);
+    it('should handle business condition evaluation with success', async () => {
+      const mockStep = {
+        id: 'step_1',
+        type: 'condition',
+        data: {
+          conditionType: 'subscription_status',
+        operator: 'equals',
+          conditionValue: 'active'
+        }
+      };
+
+      const mockContext = {
+        data: { subscription_status: 'active' }
+      };
+
+      const mockExecution = {
+        id: 'exec-123',
+        status: 'running'
+      };
+
+      const expectedResult = {
+        success: true,
+        result: true,
+        businessContext: {
+          domain: 'general',
+          conditionType: 'multi_domain',
+          evaluatedAt: expect.any(String)
+        },
+        metadata: {
+          conditionPassed: true,
+          actionsToExecute: 0
+        }
+      };
+
+      conditionExecutor.evaluateBusinessCondition.mockResolvedValue(expectedResult);
+
+      const result = await conditionExecutor.evaluateBusinessCondition(mockStep, mockContext, mockExecution);
+
+      expect(result.success).toBe(true);
+      expect(result.result).toBe(true);
+      expect(result.businessContext.domain).toBe('general');
+      expect(conditionExecutor.evaluateBusinessCondition).toHaveBeenCalledWith(mockStep, mockContext, mockExecution);
+    });
+
+    it('should handle business condition evaluation with failure', async () => {
+      const mockStep = {
+        id: 'step_1',
+        type: 'condition',
+        data: {
+          conditionType: 'subscription_status',
+          operator: 'equals',
+          conditionValue: 'active'
+        }
+      };
+
+      const mockContext = {
+        data: { subscription_status: 'inactive' }
+      };
+
+      const mockExecution = {
+        id: 'exec-123',
+        status: 'running'
+      };
+
+      const expectedResult = {
+        success: false,
+        result: false,
+        error: 'Business condition evaluation failed: Invalid status',
+        businessContext: {
+          domain: 'general',
+          conditionType: 'multi_domain',
+          error: 'Business condition evaluation failed: Invalid status'
+        }
+      };
+
+      conditionExecutor.evaluateBusinessCondition.mockResolvedValue(expectedResult);
+
+      const result = await conditionExecutor.evaluateBusinessCondition(mockStep, mockContext, mockExecution);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Business condition evaluation failed');
+      expect(result.businessContext.error).toBeDefined();
+    });
+
+    it('should validate business condition configuration', () => {
+      const validCondition = {
+        conditionType: 'subscription_status',
+        operator: 'equals',
+        conditionValue: 'active'
+      };
+
+      const validationResult = {
+        isValid: true,
+        errors: [],
+        warnings: []
+      };
+
+      conditionExecutor.validate.mockReturnValue(validationResult);
+
+      const result = conditionExecutor.validate({ data: validCondition });
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(conditionExecutor.validate).toHaveBeenCalled();
+    });
+
+    it('should validate business condition with errors', () => {
+      const invalidCondition = {
+        conditionType: 'invalid_type',
+        operator: 'invalid_operator',
+        conditionValue: null
+      };
+
+      const validationResult = {
+        isValid: false,
+        errors: [
+          'Invalid conditionType: invalid_type. Must be one of: product_package, user_segment, subscription_status',
+          'Invalid operator: invalid_operator. Must be one of: equals, not_equals, contains...',
+          'conditionValue is required for single condition structure'
+        ],
+        warnings: []
+      };
+
+      conditionExecutor.validate.mockReturnValue(validationResult);
+
+      const result = conditionExecutor.validate({ data: invalidCondition });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toHaveLength(3);
+      expect(result.errors[0]).toContain('Invalid conditionType');
+    });
+
+    it('should handle if-else structure with extracted actions', async () => {
+      const mockStep = {
+        id: 'step_1',
+        type: 'condition',
+        data: {
+          if: [
+            { product_package: 'package_1' },
+            { send_email: { name: 'welcome' } },
+            { product_package: 'package_2' },
+            { send_email: { name: 'premium_welcome' } }
+          ]
+        }
+      };
+
+      const mockContext = {
+        data: { product_package: 'package_1' }
+      };
+
+      const mockExecution = {
+        id: 'exec-123',
+        status: 'running'
+      };
+
+      const expectedResult = {
+        success: true,
+        result: true,
+        matchedBranch: { send_email: { name: 'welcome' } },
+        extractedActions: [{ send_email: { name: 'welcome' } }],
+        businessContext: {
+          domain: 'general',
+          conditionType: 'multi_domain',
+          evaluatedAt: expect.any(String)
+        },
+        metadata: {
+          conditionPassed: true,
+          actionsToExecute: 1
+        }
+      };
+
+      conditionExecutor.evaluateBusinessCondition.mockResolvedValue(expectedResult);
+
+      const result = await conditionExecutor.evaluateBusinessCondition(mockStep, mockContext, mockExecution);
+
+      expect(result.success).toBe(true);
+      expect(result.extractedActions).toHaveLength(1);
+      expect(result.extractedActions[0].send_email.name).toBe('welcome');
+    });
+
+    it('should support all business condition types', () => {
+      const supportedTypes = [
+        'product_package', 'user_segment', 'subscription_status', 'email_domain',
+        'custom_field', 'user_condition', 'business_rule', 'payment_method',
+        'user_preferences', 'subscription_tier', 'user_activity', 'geographic_location',
+        'device_type', 'browser_type', 'time_based', 'frequency_based'
+      ];
+
+      const schema = conditionExecutor.getConditionSchema();
+      const enumTypes = schema.properties.conditionType.enum;
+
+      supportedTypes.forEach(type => {
+        expect(enumTypes).toContain(type);
       });
+
+      expect(enumTypes).toHaveLength(16);
+    });
+
+    it('should support all condition operators', () => {
+      const supportedOperators = conditionExecutor.getSupportedOperators();
+      const expectedOperators = [
+        'equals', 'not_equals', 'contains', 'not_contains', 'greater_than', 'less_than',
+        'greater_than_or_equal', 'less_than_or_equal', 'in', 'not_in', 'starts_with',
+        'ends_with', 'regex', 'is_null', 'is_not_null', 'is_empty', 'is_not_empty'
+      ];
+
+      expectedOperators.forEach(operator => {
+        expect(supportedOperators).toContain(operator);
+      });
+
+      expect(supportedOperators).toHaveLength(17);
+    });
+
+    it('should handle business-specific validation rules', () => {
+      const subscriptionCondition = {
+        conditionType: 'subscription_status',
+        operator: 'equals',
+        conditionValue: 'active'
+      };
+
+      const userSegmentCondition = {
+        conditionType: 'user_segment',
+        operator: 'in',
+        conditionValue: ['premium', 'vip']
+      };
+
+      const timeBasedCondition = {
+        conditionType: 'time_based',
+        operator: 'equals',
+        conditionValue: { hour: 9, minute: 0 }
+      };
+
+      // Mock validation results for different condition types
+      conditionExecutor.validate
+        .mockReturnValueOnce({ isValid: true, errors: [], warnings: [] }) // subscription
+        .mockReturnValueOnce({ isValid: true, errors: [], warnings: [] }) // user_segment
+        .mockReturnValueOnce({ isValid: true, errors: [], warnings: [] }); // time_based
+
+      const subscriptionResult = conditionExecutor.validate({ data: subscriptionCondition });
+      const userSegmentResult = conditionExecutor.validate({ data: userSegmentCondition });
+      const timeBasedResult = conditionExecutor.validate({ data: timeBasedCondition });
+
+      expect(subscriptionResult.isValid).toBe(true);
+      expect(userSegmentResult.isValid).toBe(true);
+      expect(timeBasedResult.isValid).toBe(true);
+    });
+
+    it('should handle condition execution with business context', async () => {
+      const mockStep = {
+        id: 'step_1',
+        type: 'condition',
+        data: {
+          conditionType: 'product_package',
+          operator: 'equals',
+          conditionValue: 'premium'
+        }
+      };
+
+      const mockContext = {
+        data: { product_package: 'premium' }
+      };
+
+      const mockExecution = {
+        id: 'exec-123',
+        status: 'running'
+      };
+
+      const expectedResult = {
+        success: true,
+        result: true,
+        businessContext: {
+          domain: 'general',
+          conditionType: 'multi_domain',
+          evaluatedAt: expect.any(String)
+        },
+        metadata: {
+          conditionPassed: true,
+          businessDomain: 'general',
+          conditionType: 'multi_domain'
+        }
+      };
+
+      conditionExecutor.execute.mockResolvedValue(expectedResult);
+
+      const result = await conditionExecutor.execute(mockStep, mockContext, mockExecution);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.businessDomain).toBe('general');
+      expect(result.metadata.conditionType).toBe('multi_domain');
     });
   });
 
@@ -1100,6 +1399,603 @@ describe('WorkflowOrchestrationEngine', () => {
       expect(retryConfig.maxRetries).toBeGreaterThan(0);
       expect(retryConfig.retryDelay).toBeGreaterThan(0);
       expect(retryConfig.backoffMultiplier).toBeGreaterThan(1);
+    });
+  });
+
+  describe('Workflow Definition Conversion Tests', () => {
+    it('should convert JsonLogic rule to WorkflowDefinition correctly', async () => {
+      const mockJsonLogicRule = {
+        id: 'test-workflow',
+        rule: {
+          and: [
+            { trigger: { event: 'user_created', execute: true } },
+            { delay: { type: '2_minutes', execute: true } },
+            { send_email: { data: {}, name: 'welcome_email', execute: true } },
+            { end: { reason: 'completed', execute: true } }
+          ]
+        }
+      };
+
+      jest.spyOn(jsonLogicRuleRepository, 'findOne').mockResolvedValue(mockJsonLogicRule as any);
+
+      const result = await (engine as any).getWorkflowById('test-workflow');
+
+      expect(result).toBeDefined();
+      expect(result.id).toBe('test-workflow');
+      expect(result.steps).toHaveLength(4);
+      expect(result.steps[0].type).toBe('action'); // trigger becomes action
+      expect(result.steps[1].type).toBe('delay');
+      expect(result.steps[2].type).toBe('action'); // send_email becomes action
+      expect(result.steps[3].type).toBe('end');
+    });
+
+    it('should handle parallel workflow structures', async () => {
+      const mockJsonLogicRule = {
+        id: 'parallel-workflow',
+        rule: {
+          parallel: {
+            branches: [
+              { and: [{ send_email: { name: 'email_1' } }] },
+              { and: [{ send_sms: { name: 'sms_1' } }] }
+            ]
+          }
+        }
+      };
+
+      jest.spyOn(jsonLogicRuleRepository, 'findOne').mockResolvedValue(mockJsonLogicRule as any);
+
+      const result = await (engine as any).getWorkflowById('parallel-workflow');
+
+      expect(result).toBeDefined();
+      expect(result.steps).toHaveLength(2);
+      expect(result.steps[0].type).toBe('action');
+      expect(result.steps[1].type).toBe('action');
+    });
+
+    it('should handle simple condition workflows', async () => {
+      const mockJsonLogicRule = {
+        id: 'condition-workflow',
+        rule: {
+          and: [
+            { product_package: 'package_1' },
+            { send_email: { name: 'package_email' } }
+          ]
+        }
+      };
+
+      jest.spyOn(jsonLogicRuleRepository, 'findOne').mockResolvedValue(mockJsonLogicRule as any);
+
+      const result = await (engine as any).getWorkflowById('condition-workflow');
+
+      expect(result).toBeDefined();
+      expect(result.steps).toHaveLength(2);
+      expect(result.steps[0].type).toBe('condition');
+      expect(result.steps[0].data.conditionType).toBe('product_package');
+      expect(result.steps[1].type).toBe('action');
+    });
+  });
+
+  describe('Dynamic Step Reconstruction Tests', () => {
+    it('should reconstruct dynamic steps from delay context', async () => {
+      const mockWorkflow = {
+        steps: [
+          { id: 'step_0', type: 'condition', data: { conditionType: 'product_package' } }
+        ]
+      };
+
+      const mockContext = {
+        data: { product_package: 'package_1' }
+      };
+
+      const mockDelay = {
+        id: 'delay-123',
+        stepId: 'step_1',
+        context: { originalDelayType: '2_minutes' }
+      };
+
+      // Mock condition executor to return actions
+      const mockConditionExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          result: {
+            extractedActions: [
+              { delay: { type: '2_minutes' } },
+              { send_email: { name: 'welcome' } },
+              { send_email: { name: 'followup' } }
+            ]
+          }
+        })
+      };
+
+      jest.spyOn(nodeRegistry, 'getExecutor').mockReturnValue(mockConditionExecutor as any);
+
+      const result = await (engine as any).reconstructDynamicStepsFromDelay(mockWorkflow, mockContext, mockDelay);
+
+      expect(result).toBeDefined();
+      expect(result.length).toBeGreaterThan(0);
+      expect(mockConditionExecutor.execute).toHaveBeenCalled();
+    });
+
+    it('should handle delay step conversion correctly', () => {
+      const actions = [
+        { delay: { type: '2_minutes' } },
+        { send_email: { name: 'welcome' } }
+      ];
+
+      const result = (engine as any).convertActionsToSteps(actions, 0);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].type).toBe('delay');
+      expect(result[0].data.actionType).toBe('delay');
+      expect(result[0].data.delayMs).toBe(120000); // 2 minutes in ms
+      expect(result[1].type).toBe('action');
+      expect(result[1].data.actionType).toBe('send_email');
+    });
+  });
+
+  describe('Workflow Execution Lifecycle Tests', () => {
+    it('should handle workflow suspension and resumption', async () => {
+      const mockWorkflow = {
+        id: 'test-workflow',
+        steps: [
+          { id: 'step_0', type: 'action', data: { actionType: 'custom' } },
+          { id: 'step_1', type: 'delay', data: { type: '2_minutes' } },
+          { id: 'step_2', type: 'action', data: { actionType: 'send_email' } }
+        ]
+      };
+
+      const mockContext = {
+        executionId: 'exec-123',
+        workflowId: 'test-workflow',
+        userId: 'user-123',
+        data: {}
+      };
+
+      const mockExecution = {
+        id: 'exec-123',
+        workflowId: 'test-workflow',
+        userId: 'user-123',
+        status: 'running',
+        state: { history: [], context: mockContext }
+      };
+
+      // Mock delay executor to return suspension
+      const mockDelayExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          result: { message: 'Delay scheduled' },
+          metadata: {
+            workflowSuspended: true,
+            resumeAt: new Date(Date.now() + 120000).toISOString()
+          }
+        }),
+        validate: jest.fn().mockReturnValue({ isValid: true, errors: [] }),
+        getNodeType: jest.fn().mockReturnValue('delay'),
+        getDependencies: jest.fn().mockReturnValue([])
+      };
+
+      jest.spyOn(nodeRegistry, 'getExecutor').mockReturnValue(mockDelayExecutor);
+      jest.spyOn(executionRepository, 'save').mockResolvedValue(mockExecution as any);
+
+      const result = await (engine as any).executeWorkflowSteps(mockWorkflow, mockContext, mockExecution);
+
+      expect(result.success).toBe(true);
+      expect(result.metadata.workflowSuspended).toBe(true);
+      expect(result.metadata.resumeAt).toBeDefined();
+    });
+
+    it('should prevent duplicate workflow executions', async () => {
+      const mockWorkflow = {
+        id: 'test-workflow',
+        name: 'Test Workflow',
+        description: 'Test workflow description',
+        version: '1.0.0',
+        steps: [{ id: 'step_0', type: 'action' as const, data: { actionType: 'custom' } }],
+        metadata: {}
+      };
+
+      const mockContext = {
+        executionId: 'exec-123',
+        workflowId: 'test-workflow',
+        userId: 'user-123',
+        triggerType: 'manual',
+        triggerId: 'trigger-123',
+        triggerData: {},
+        data: {},
+        metadata: {},
+        createdAt: new Date()
+      };
+
+      const existingExecution = {
+        id: 'existing-exec',
+        executionId: 'existing-exec',
+        workflowId: 'test-workflow',
+        userId: 'user-123',
+        triggerType: 'manual',
+        triggerId: 'trigger-123',
+        status: 'running'
+      };
+
+      jest.spyOn(engine as any, 'findExistingExecution').mockResolvedValue(existingExecution as WorkflowExecution);
+
+      const result = await engine.executeWorkflow(mockWorkflow, mockContext);
+
+      expect(result.success).toBe(true);
+      expect(result.executionId).toBe('existing-exec');
+      expect(result.result.message).toBe('Duplicate execution prevented');
+    });
+  });
+
+  describe('Error Handling and Recovery Tests', () => {
+    it('should handle step execution failures gracefully', async () => {
+      const mockStep = {
+        id: 'step_1',
+        type: 'action',
+        data: { actionType: 'custom' }
+      };
+
+      const mockContext = {
+        data: {}
+      };
+
+      const mockExecution = {
+        id: 'exec-123',
+        status: 'running'
+      };
+
+      const mockActionExecutor = {
+        execute: jest.fn().mockRejectedValue(new Error('Step execution failed')),
+        validate: jest.fn().mockReturnValue({ isValid: true, errors: [] }),
+        getNodeType: jest.fn().mockReturnValue('action'),
+        getDependencies: jest.fn().mockReturnValue([])
+      };
+
+      jest.spyOn(nodeRegistry, 'getExecutor').mockReturnValue(mockActionExecutor);
+
+      const result = await (engine as any).executeStep(mockStep, mockContext, mockExecution);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Step execution failed');
+    });
+
+    it('should handle workflow not found errors', async () => {
+      jest.spyOn(jsonLogicRuleRepository, 'findOne').mockResolvedValue(null);
+
+      const result = await (engine as any).getWorkflowById('non-existent-workflow');
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle delay processing errors', async () => {
+      const mockDelay = {
+        id: 'delay-123',
+        executionId: 'exec-123',
+        status: 'processing'
+      };
+
+      jest.spyOn(delayRepository, 'findOne').mockResolvedValue(null); // Delay no longer exists
+      jest.spyOn(delayRepository, 'save').mockResolvedValue(mockDelay as WorkflowDelay);
+
+      await engine.resumeWorkflowFromDelay(mockDelay as WorkflowDelay);
+
+      // Should not throw error, just log warning
+      expect(delayRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Utility Method Tests', () => {
+    it('should convert delay types to milliseconds correctly', () => {
+      expect((engine as any).convertDelayTypeToMs('2_minutes')).toBe(120000);
+      expect((engine as any).convertDelayTypeToMs('1_hour')).toBe(3600000);
+      expect((engine as any).convertDelayTypeToMs('1_day')).toBe(86400000);
+      expect((engine as any).convertDelayTypeToMs('unknown')).toBe(1000); // default
+    });
+
+    it('should identify simple conditions correctly', () => {
+      expect((engine as any).isSimpleCondition({ product_package: 'package_1' })).toBe(true);
+      expect((engine as any).isSimpleCondition({ user_segment: 'premium' })).toBe(true);
+      expect((engine as any).isSimpleCondition({ complex: { nested: 'value' } })).toBe(false);
+      expect((engine as any).isSimpleCondition({ multiple: 'keys', here: 'value' })).toBe(false);
+    });
+
+    it('should generate unique execution IDs', () => {
+      const id1 = (engine as any).generateExecutionId();
+      const id2 = (engine as any).generateExecutionId();
+
+      expect(id1).toMatch(/^exec_\d+_[a-z0-9]+$/);
+      expect(id2).toMatch(/^exec_\d+_[a-z0-9]+$/);
+      expect(id1).not.toBe(id2);
+    });
+  });
+
+  describe('Trigger Framework Integration Tests', () => {
+    it('should execute workflow from trigger using new framework', async () => {
+      const triggerType = 'subscription_created';
+      const triggerData = {
+        subscriptionId: 'sub-123',
+        userId: 'user-123',
+        status: 'active',
+        plan: 'premium'
+      };
+
+      const mockTrigger = {
+        triggerType: 'subscription_created',
+        version: '1.0.0',
+        name: 'Subscription Created Trigger',
+        description: 'Triggers when a subscription is created',
+        validate: jest.fn().mockReturnValue({
+          isValid: true,
+          context: {
+            executionId: 'exec-123',
+            workflowId: 'subscription-workflow',
+            triggerType: 'subscription_created',
+            triggerId: 'sub-123',
+            userId: 'user-123',
+            timestamp: new Date(),
+            entityData: {
+              id: 'sub-123',
+              type: 'subscription',
+              data: triggerData
+            },
+            triggerMetadata: {},
+            executionMetadata: {}
+          }
+        }),
+        process: jest.fn().mockResolvedValue({
+          success: true,
+          context: {
+            executionId: 'exec-123',
+            workflowId: 'subscription-workflow',
+            triggerType: 'subscription_created',
+            triggerId: 'sub-123',
+            userId: 'user-123',
+            timestamp: new Date(),
+            entityData: {
+              id: 'sub-123',
+              type: 'subscription',
+              data: triggerData
+            },
+            triggerMetadata: {},
+            executionMetadata: {}
+          }
+        }),
+        getWorkflowId: jest.fn().mockReturnValue('subscription-workflow'),
+        shouldExecute: jest.fn().mockReturnValue(true)
+      };
+
+      // Mock trigger registry
+      jest.spyOn(triggerRegistry, 'getTrigger').mockReturnValue(mockTrigger);
+      jest.spyOn(triggerRegistry, 'processTrigger').mockResolvedValue({
+        success: true,
+        context: {
+          executionId: 'exec-123',
+          workflowId: 'subscription-workflow',
+          triggerType: 'subscription_created',
+          triggerId: 'sub-123',
+          userId: 'user-123',
+          timestamp: new Date(),
+          entityData: {
+            id: 'sub-123',
+            type: 'subscription',
+            data: triggerData
+          },
+          triggerMetadata: {
+            source: 'test',
+            version: '1.0.0',
+            priority: 'normal',
+            retryable: true
+          },
+          executionMetadata: {
+            correlationId: 'corr-123',
+            sessionId: 'session-123',
+            requestId: 'req-123',
+            parentExecutionId: 'parent-123',
+            tags: ['test', 'subscription']
+          }
+        }
+      });
+      jest.spyOn(triggerRegistry, 'shouldTriggerExecute').mockReturnValue(true);
+      jest.spyOn(triggerRegistry, 'getWorkflowIdForTrigger').mockReturnValue('subscription-workflow');
+
+      // Mock workflow execution
+      jest.spyOn(engine as any, 'getWorkflowById').mockResolvedValue({
+        id: 'subscription-workflow',
+        name: 'Subscription Workflow',
+        description: 'Test workflow',
+        version: '1.0.0',
+        steps: [],
+        metadata: {}
+      });
+      jest.spyOn(engine as any, 'executeWorkflow').mockResolvedValue({
+        success: true,
+        executionId: 'exec-123',
+        error: null
+      });
+
+      // Act
+      const result = await engine.executeWorkflowFromTrigger(triggerType, triggerData);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.executionId).toBe('exec-123');
+      expect(triggerRegistry.getTrigger).toHaveBeenCalledWith(triggerType);
+      expect(triggerRegistry.processTrigger).toHaveBeenCalledWith(triggerType, triggerData);
+      expect(triggerRegistry.shouldTriggerExecute).toHaveBeenCalled();
+      expect(triggerRegistry.getWorkflowIdForTrigger).toHaveBeenCalled();
+    });
+
+    it('should handle trigger validation failure', async () => {
+      const triggerType = 'invalid_trigger';
+      const triggerData = { invalid: 'data' };
+
+      // Mock trigger registry to return null (trigger not found)
+      jest.spyOn(triggerRegistry, 'getTrigger').mockReturnValue(null);
+
+      // Act
+      const result = await engine.executeWorkflowFromTrigger(triggerType, triggerData);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(`Trigger type '${triggerType}' is not registered`);
+      expect(result.workflowId).toBe('unknown');
+      expect(result.executionId).toMatch(/^error_\d+$/);
+    });
+
+    it('should handle trigger processing failure', async () => {
+      const triggerType = 'subscription_created';
+      const triggerData = { subscriptionId: 'sub-123' };
+
+      const mockTrigger = {
+        triggerType: 'subscription_created',
+        version: '1.0.0',
+        name: 'Subscription Created Trigger',
+        description: 'Triggers when a subscription is created',
+        validate: jest.fn().mockReturnValue({ isValid: true }),
+        process: jest.fn().mockResolvedValue({ success: false, error: 'Processing failed' }),
+        getWorkflowId: jest.fn().mockReturnValue('subscription-workflow'),
+        shouldExecute: jest.fn().mockReturnValue(true)
+      };
+
+      // Mock trigger registry
+      jest.spyOn(triggerRegistry, 'getTrigger').mockReturnValue(mockTrigger);
+      jest.spyOn(triggerRegistry, 'processTrigger').mockResolvedValue({
+        success: false,
+        error: 'Processing failed',
+        context: {
+          executionId: 'exec-123',
+          workflowId: 'subscription-workflow',
+          triggerType: 'subscription_created',
+          triggerId: 'sub-123',
+          userId: 'user-123',
+          timestamp: new Date(),
+          entityData: {
+            id: 'sub-123',
+            type: 'subscription',
+            data: triggerData
+          },
+          triggerMetadata: {
+            source: 'test',
+            version: '1.0.0',
+            priority: 'normal',
+            retryable: true
+          },
+          executionMetadata: {
+            correlationId: 'corr-123',
+            sessionId: 'session-123',
+            requestId: 'req-123',
+            parentExecutionId: 'parent-123',
+            tags: ['test', 'subscription']
+          }
+        }
+      });
+
+      // Act
+      const result = await engine.executeWorkflowFromTrigger(triggerType, triggerData);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Trigger processing failed: Processing failed');
+      expect(result.workflowId).toBe('unknown');
+      expect(result.executionId).toMatch(/^error_\d+$/);
+    });
+
+    it('should handle trigger should not execute', async () => {
+      const triggerType = 'subscription_created';
+      const triggerData = { subscriptionId: 'sub-123' };
+
+      const mockTrigger = {
+        triggerType: 'subscription_created',
+        version: '1.0.0',
+        name: 'Subscription Created Trigger',
+        description: 'Triggers when a subscription is created',
+        validate: jest.fn().mockReturnValue({ isValid: true }),
+        process: jest.fn().mockResolvedValue({ success: true }),
+        getWorkflowId: jest.fn().mockReturnValue('subscription-workflow'),
+        shouldExecute: jest.fn().mockReturnValue(false)
+      };
+
+      // Mock trigger registry
+      jest.spyOn(triggerRegistry, 'getTrigger').mockReturnValue(mockTrigger);
+      jest.spyOn(triggerRegistry, 'processTrigger').mockResolvedValue({
+        success: true,
+        context: {
+          executionId: 'exec-123',
+          workflowId: 'subscription-workflow',
+          triggerType: 'subscription_created',
+          triggerId: 'sub-123',
+          userId: 'user-123',
+          timestamp: new Date(),
+          entityData: {
+            id: 'sub-123',
+            type: 'subscription',
+            data: triggerData
+          },
+          triggerMetadata: {
+            source: 'test',
+            version: '1.0.0',
+            priority: 'normal',
+            retryable: true
+          },
+          executionMetadata: {
+            correlationId: 'corr-123',
+            sessionId: 'session-123',
+            requestId: 'req-123',
+            parentExecutionId: 'parent-123',
+            tags: ['test', 'subscription']
+          }
+        }
+      });
+      jest.spyOn(triggerRegistry, 'shouldTriggerExecute').mockReturnValue(false);
+
+      // Act
+      const result = await engine.executeWorkflowFromTrigger(triggerType, triggerData);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.executionId).toBe('exec-123');
+      expect(result.workflowId).toBe('subscription-workflow');
+    });
+
+    it('should register trigger and get registered triggers', async () => {
+      const mockTrigger = {
+        triggerType: 'test_trigger',
+        version: '1.0.0',
+        name: 'Test Trigger',
+        description: 'Test trigger for testing',
+        validate: jest.fn(),
+        process: jest.fn(),
+        getWorkflowId: jest.fn(),
+        shouldExecute: jest.fn()
+      };
+
+      // Mock trigger registry
+      jest.spyOn(triggerRegistry, 'register').mockImplementation();
+      jest.spyOn(triggerRegistry, 'getAllTriggers').mockReturnValue([mockTrigger]);
+
+      // Act
+      await engine.registerTrigger(mockTrigger);
+      const registeredTriggers = engine.getRegisteredTriggers();
+
+      // Assert
+      expect(triggerRegistry.register).toHaveBeenCalledWith(mockTrigger);
+      expect(registeredTriggers).toEqual([mockTrigger]);
+    });
+
+    it('should get trigger statistics', async () => {
+      const mockStats = {
+        totalTriggers: 3,
+        triggerTypes: ['subscription_created', 'user_created', 'newsletter_subscribed']
+      };
+
+      // Mock trigger registry
+      jest.spyOn(triggerRegistry, 'getStats').mockReturnValue(mockStats);
+
+      // Act
+      const stats = engine.getTriggerStats();
+
+      // Assert
+      expect(stats).toEqual(mockStats);
+      expect(triggerRegistry.getStats).toHaveBeenCalled();
     });
   });
 
