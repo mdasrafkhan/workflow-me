@@ -43,18 +43,28 @@ dev:
 	docker-compose up -d
 
 dev-build:
+	@echo "Stopping any existing containers..."
+	@docker-compose down
 	@echo "Running backend unit tests before building..."
 	@cd ../backend && npm test
 	@echo "Backend unit tests passed! Running frontend tests..."
 	@cd ../frontend && npm test -- --watchAll=false
 	@echo "Frontend tests passed! Building and starting development environment..."
-	docker-compose up --build -d
+	docker-compose up --build -d postgres redis backend-1 backend-2 frontend
 
 dev-logs:
 	docker-compose logs -f
 
 dev-shell:
-	docker-compose exec backend sh
+	docker-compose exec backend-1 sh
+
+# Multi-pod testing
+dev-multi-pod:
+	@echo "Starting multi-pod environment for testing..."
+	docker-compose up --build -d postgres redis backend-1 backend-2 frontend
+
+dev-multi-pod-logs:
+	docker-compose logs -f backend-1 backend-2
 
 # Production Environment
 prod:
@@ -141,7 +151,7 @@ setup:
 
 # Development helpers
 dev-restart:
-	docker-compose restart backend frontend
+	docker-compose restart backend-1 backend-2 frontend
 
 dev-rebuild:
 	docker-compose down
@@ -174,7 +184,7 @@ db-reset:
 
 db-seed:
 	@echo "Seeding database with test data..."
-	docker-compose exec backend npm run test:runner
+	docker-compose exec backend-1 npm run test:runner
 	@echo "Database seeded with test data"
 
 # Workflow specific

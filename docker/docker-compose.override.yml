@@ -10,7 +10,18 @@ services:
       - /usr/src/app/node_modules
     command: npm start
 
-  backend:
+  backend-1:
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+    volumes:
+      - ../backend:/usr/src/app
+      - /usr/src/app/node_modules
+      - /usr/src/app/dist
+    command: npm run start:dev
+    user: "1001:1001"
+
+  backend-2:
     environment:
       - NODE_ENV=development
       - DEBUG=*

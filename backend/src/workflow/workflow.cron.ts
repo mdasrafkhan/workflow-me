@@ -32,7 +32,7 @@ export class WorkflowCron {
     private readonly userTriggerService: UserTriggerService
   ) {}
 
-      @Cron('* * * * *') // Runs every minute
+      // @Cron('* * * * *') // DISABLED - Now handled by DistributedSchedulerService
   async handleCron() {
     const startTime = Date.now();
 

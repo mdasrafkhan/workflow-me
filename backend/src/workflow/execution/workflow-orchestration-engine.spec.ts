@@ -601,6 +601,166 @@ describe('WorkflowOrchestrationEngine', () => {
       console.log('✅ SUSPENSION LOGIC VALIDATED: workflowSuspended flag is properly set');
     });
 
+    it('should validate the workflow suspension fix - workflows are marked as delayed not completed', async () => {
+      // This test validates the core fix: workflows with delays should be marked as 'delayed' not 'completed'
+      const executionId = 'suspension-fix-test';
+      const workflowId = 'suspension-fix-workflow';
+
+      const mockWorkflow = {
+        id: workflowId,
+        name: 'Suspension Fix Test Workflow',
+        steps: [
+          { id: 'step_0', type: 'action', data: { actionType: 'custom' } },
+          { id: 'step_1', type: 'delay', data: { type: '2_minutes', execute: true } },
+          { id: 'step_2', type: 'action', data: { actionType: 'send_email' } }
+        ]
+      };
+
+      const mockExecution = {
+        id: executionId,
+        workflowId: workflowId,
+        userId: 'test-user',
+        status: 'running',
+        currentStep: 'step_0',
+        context: { data: {} },
+        history: [],
+        executionId: 'exec-123',
+        triggerType: 'user_created',
+        triggerId: 'trigger-123',
+        state: {
+          currentState: 'running',
+          context: { data: {} },
+          history: []
+        },
+        retryCount: 0,
+        nextRetryAt: null,
+        completedAt: null,
+        failedAt: null,
+        error: null,
+        metadata: {},
+        workflowDefinition: mockWorkflow,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as WorkflowExecution;
+
+      // Mock repositories
+      jest.spyOn(executionRepository, 'findOne').mockResolvedValue(mockExecution);
+      jest.spyOn(executionRepository, 'save').mockResolvedValue(mockExecution);
+      jest.spyOn(jsonLogicRuleRepository, 'findOne').mockResolvedValue({
+        id: workflowId,
+        rule: mockWorkflow,
+        name: 'Suspension Fix Test Workflow',
+        visualWorkflow: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as JsonLogicRule);
+
+      // Mock executors
+      const mockActionExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          result: { message: 'Action completed' }
+        }),
+        validate: jest.fn().mockReturnValue({ isValid: true, errors: [], warnings: [] }),
+        getNodeType: jest.fn().mockReturnValue('action'),
+        getDependencies: jest.fn().mockReturnValue([])
+      };
+
+      const mockDelayExecutor = {
+        execute: jest.fn().mockResolvedValue({
+          success: true,
+          result: { message: 'Delay scheduled' },
+          metadata: {
+            workflowSuspended: true,
+            suspendedAt: 'step_1',
+            resumeAt: new Date(Date.now() + 120000).toISOString()
+          }
+        }),
+        validate: jest.fn().mockReturnValue({ isValid: true, errors: [], warnings: [] }),
+        getNodeType: jest.fn().mockReturnValue('delay'),
+        getDependencies: jest.fn().mockReturnValue([])
+      };
+
+      // Mock getExecutor to return appropriate executors
+      jest.spyOn(nodeRegistry, 'getExecutor')
+        .mockReturnValueOnce(mockActionExecutor) // step_0 (action)
+        .mockReturnValueOnce(mockDelayExecutor); // step_1 (delay)
+
+      // Act - Execute workflow steps (this should suspend at delay)
+      const result = await (engine as any).executeWorkflowSteps(mockWorkflow, { data: {} }, mockExecution);
+
+      // Assert - The fix should ensure workflow is suspended, not completed
+      expect(result.success).toBe(true);
+      expect(result.metadata?.workflowSuspended).toBe(true);
+      expect(result.metadata?.suspendedAt).toBe('step_1');
+      expect(result.metadata?.resumeAt).toBeDefined();
+
+      // Test the updateExecutionStatus method directly to verify the fix
+      const mockExecutionForStatus = { ...mockExecution, status: 'running' };
+      await (engine as any).updateExecutionStatus(mockExecutionForStatus, result);
+
+      // Verify the execution status was updated correctly by the fix
+      expect(mockExecutionForStatus.status).toBe('delayed'); // This is the key fix - should be 'delayed' not 'completed'
+      expect(mockExecutionForStatus.currentStep).toBe('step_1');
+
+      // Verify only the first action and delay were executed
+      expect(mockActionExecutor.execute).toHaveBeenCalledTimes(1); // Only step_0
+      expect(mockDelayExecutor.execute).toHaveBeenCalledTimes(1); // Only step_1
+
+      console.log('✅ WORKFLOW SUSPENSION FIX VALIDATED: Workflow correctly marked as delayed, not completed');
+    });
+
+    it('should validate updateExecutionStatus fix - suspended workflows get delayed status', async () => {
+      // This test specifically validates the updateExecutionStatus method fix
+      const mockExecution = {
+        id: 'test-execution',
+        status: 'running',
+        currentStep: 'step_0',
+        state: {
+          history: []
+        }
+      } as WorkflowExecution;
+
+      const suspendedResult = {
+        success: true,
+        result: { message: 'Delay scheduled' },
+        metadata: {
+          workflowSuspended: true,
+          suspendedAt: 'step_1',
+          resumeAt: new Date(Date.now() + 120000).toISOString()
+        }
+      };
+
+      const completedResult = {
+        success: true,
+        result: { message: 'Workflow completed' },
+        metadata: {}
+      };
+
+      // Mock the execution repository
+      jest.spyOn(executionRepository, 'save').mockResolvedValue(mockExecution);
+
+      // Test suspended workflow (should be marked as 'delayed')
+      await (engine as any).updateExecutionStatus(mockExecution, suspendedResult);
+
+      expect(mockExecution.status).toBe('delayed');
+      expect(mockExecution.currentStep).toBe('step_1');
+      expect(executionRepository.save).toHaveBeenCalledWith(mockExecution);
+
+      // Reset for next test
+      mockExecution.status = 'running';
+      mockExecution.currentStep = 'step_0';
+      jest.clearAllMocks();
+
+      // Test completed workflow (should be marked as 'completed')
+      await (engine as any).updateExecutionStatus(mockExecution, completedResult);
+
+      expect(mockExecution.status).toBe('completed');
+      expect(mockExecution.currentStep).toBe('end');
+      expect(executionRepository.save).toHaveBeenCalledWith(mockExecution);
+
+      console.log('✅ UPDATE EXECUTION STATUS FIX VALIDATED: Suspended workflows correctly marked as delayed');
+    });
 
     it('should verify the core bug fix - slice with end index', () => {
       // Test the core fix: slice vs slice with end index

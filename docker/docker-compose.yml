@@ -1,4 +1,22 @@
 services:
+  # Redis for queues and distributed locking
+  redis:
+    image: redis:7-alpine
+    container_name: workflow-redis
+    ports:
+      - "16379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres:
     image: postgres:15-alpine
     container_name: workflow-db
@@ -19,21 +37,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: workflow-redis
-    ports:
-      - "16379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - workflow-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   frontend:
     build:
@@ -48,11 +51,13 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
+      - REACT_APP_API_URL=http://workflow-backend-1:4000
+      - GENERATE_SOURCEMAP=false
     networks:
       - workflow-network
     restart: unless-stopped
     depends_on:
-      - backend
+      - backend-1
 
   backend-test:
     build:
@@ -72,9 +77,24 @@ services:
       DB_PASSWORD: workflow_password
       DB_NAME: workflow_db
 
+      # Database Connection Pool Configuration (Test)
+      DB_POOL_MAX: 10
+      DB_POOL_MIN: 2
+      DB_POOL_ACQUIRE: 15000
+      DB_POOL_IDLE: 5000
+      DB_POOL_EVICT: 1000
+      DB_CONNECTION_TIMEOUT: 5000
+      DB_QUERY_TIMEOUT: 15000
+      DB_STATEMENT_TIMEOUT: 30000
+      DB_VALIDATION_INTERVAL: 15000
+      DB_MAX_QUERY_TIME: 15000
+      DB_KEEPALIVE_DELAY: 5000
+
       # Redis Configuration
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_DB: 1
+      REDIS_CACHE_DB: 2
 
       # Application Configuration
       NODE_ENV: test
@@ -84,11 +104,123 @@ services:
       - workflow-network
     user: "1001:1001"
 
-  backend:
+  # Backend Pod 1 (Main)
+  backend-1:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: workflow-backend
+    container_name: workflow-backend-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: workflow_user
+      DB_PASSWORD: workflow_password
+      DB_NAME: workflow_db
+
+      # Database Connection Pool Configuration
+      DB_POOL_MAX: 20
+      DB_POOL_MIN: 5
+      DB_POOL_ACQUIRE: 30000
+      DB_POOL_IDLE: 10000
+      DB_POOL_EVICT: 1000
+      DB_CONNECTION_TIMEOUT: 10000
+      DB_QUERY_TIMEOUT: 30000
+      DB_STATEMENT_TIMEOUT: 60000
+      DB_VALIDATION_INTERVAL: 30000
+      DB_MAX_QUERY_TIME: 30000
+      DB_KEEPALIVE_DELAY: 10000
+
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_CACHE_DB: 1
+
+      # Email Configuration (Development)
+      SMTP_HOST: smtp.ethereal.email
+      SMTP_PORT: 587
+      SMTP_USER: ethereal.user@ethereal.email
+      SMTP_PASS: ethereal.pass
+      FROM_EMAIL: noreply@workflow.example.com
+
+      # Application Configuration
+      NODE_ENV: development
+      PORT: 4000
+      POD_ID: 1
+
+      # Logging Configuration
+      IOREDIS_DEBUG: ""
+      REDIS_DEBUG: ""
+
+      # Optimization Configuration
+      WORKFLOW_EXECUTION_CONCURRENCY: 20
+      WORKFLOW_DELAY_CONCURRENCY: 10
+      WORKFLOW_SCHEDULER_CONCURRENCY: 1
+      MAX_CONCURRENT_EXECUTIONS: 50
+      DATABASE_BATCH_SIZE: 25
+      DISTRIBUTED_LOCK_DEFAULT_TTL: 30000
+      SCHEDULER_LOCK_TTL: 60000
+
+      # Workflow Configuration
+      WORKFLOW_BATCH_INTERVAL: 30
+      WORKFLOW_MAX_RETRIES: 3
+      WORKFLOW_DELAY_TOLERANCE: 1000
+
+      # Additional Workflow Environment Variables
+      WORKFLOW_EXECUTION_MAX_RETRIES: 3
+      WORKFLOW_EXECUTION_RETRY_DELAY: 2000
+      WORKFLOW_EXECUTION_REMOVE_ON_COMPLETE: 10
+      WORKFLOW_EXECUTION_REMOVE_ON_FAIL: 5
+      WORKFLOW_DELAY_MAX_RETRIES: 3
+      WORKFLOW_DELAY_RETRY_DELAY: 2000
+      WORKFLOW_DELAY_REMOVE_ON_COMPLETE: 10
+      WORKFLOW_DELAY_REMOVE_ON_FAIL: 5
+      WORKFLOW_SCHEDULER_MAX_RETRIES: 3
+      WORKFLOW_SCHEDULER_RETRY_DELAY: 5000
+      WORKFLOW_SCHEDULER_REMOVE_ON_COMPLETE: 5
+      WORKFLOW_SCHEDULER_REMOVE_ON_FAIL: 3
+      DISTRIBUTED_LOCK_MAX_RETRIES: 3
+      DISTRIBUTED_LOCK_RETRY_DELAY: 100
+      CLEANUP_INTERVAL: 3600000
+      RETENTION_DAYS: 30
+      SCHEDULER_CRON_EXPRESSION: '* * * * *'
+      MAX_CONCURRENT_WORKFLOWS: 100
+      BATCH_PROCESSING_SIZE: 20
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../backend:/usr/src/app
+      - /usr/src/app/node_modules
+      - /usr/src/app/dist
+    networks:
+      - workflow-network
+    restart: unless-stopped
+    user: "1001:1001"
+    command: ["npm", "run", "start:dev"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health/live"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+
+  # Backend Pod 2 (Worker)
+  backend-2:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: workflow-backend-2
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,10 +234,24 @@ services:
       DB_PASSWORD: workflow_password
       DB_NAME: workflow_db
 
+      # Database Connection Pool Configuration
+      DB_POOL_MAX: 20
+      DB_POOL_MIN: 5
+      DB_POOL_ACQUIRE: 30000
+      DB_POOL_IDLE: 10000
+      DB_POOL_EVICT: 1000
+      DB_CONNECTION_TIMEOUT: 10000
+      DB_QUERY_TIMEOUT: 30000
+      DB_STATEMENT_TIMEOUT: 60000
+      DB_VALIDATION_INTERVAL: 30000
+      DB_MAX_QUERY_TIME: 30000
+      DB_KEEPALIVE_DELAY: 10000
+
       # Redis Configuration
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      REDIS_CACHE_DB: 1
 
       # Email Configuration (Development)
       SMTP_HOST: smtp.ethereal.email
@@ -117,13 +263,27 @@ services:
       # Application Configuration
       NODE_ENV: development
       PORT: 4000
+      POD_ID: 2
+
+      # Logging Configuration
+      IOREDIS_DEBUG: ""
+      REDIS_DEBUG: ""
+
+      # Optimization Configuration
+      WORKFLOW_EXECUTION_CONCURRENCY: 20
+      WORKFLOW_DELAY_CONCURRENCY: 10
+      WORKFLOW_SCHEDULER_CONCURRENCY: 1
+      MAX_CONCURRENT_EXECUTIONS: 50
+      DATABASE_BATCH_SIZE: 25
+      DISTRIBUTED_LOCK_DEFAULT_TTL: 30000
+      SCHEDULER_LOCK_TTL: 60000
 
       # Workflow Configuration
       WORKFLOW_BATCH_INTERVAL: 30
       WORKFLOW_MAX_RETRIES: 3
       WORKFLOW_DELAY_TOLERANCE: 1000
     ports:
-      - "4000:4000"
+      - "4001:4000"
     volumes:
       - ../backend:/usr/src/app
       - /usr/src/app/node_modules
@@ -132,11 +292,13 @@ services:
       - workflow-network
     restart: unless-stopped
     user: "1001:1001"
+    command: ["npm", "run", "start:dev"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+
 
   adminer:
     image: adminer
@@ -146,6 +308,7 @@ services:
       - "8080:8080"
     networks:
       - workflow-network
+
 
   # Test Database (for running tests)
   postgres-test:

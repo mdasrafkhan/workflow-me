@@ -8,7 +8,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "build": "nest build",
-    "build:dev": "npm run build && node run-tests-and-cleanup.js",
+    "build:dev": "npm run build && npm run migrate:workflow && node run-tests-and-cleanup.js",
     "test": "jest --testPathIgnorePatterns=integration",
     "test:db": "cd ../docker && docker-compose up -d postgres-test redis && cd ../backend && npm run test",
     "test:full": "cd ../docker && docker-compose up -d postgres postgres-test redis && cd ../backend && npm run test",
@@ -22,7 +22,10 @@
     "test:clear": "npx ts-node src/clear-and-test.ts",
     "test:functionality": "node test-database-functionality.js",
     "test:cleanup": "curl -X POST http://localhost:4000/workflow/cleanup/test-data",
-    "test:core": "jest --testPathPattern=workflow-core"
+    "test:core": "jest --testPathPattern=workflow-core",
+    "migrate:workflow": "npx ts-node run-workflow-migration.ts",
+    "dev:setup": "npm run migrate:workflow && npm run start:dev",
+    "dev:full": "cd ../docker && docker-compose up -d postgres redis && cd ../backend && npm run dev:setup"
   },
   "jest": {
     "moduleFileExtensions": [

@@ -911,11 +911,19 @@ export class WorkflowOrchestrationEngine {
   }
 
   private async updateExecutionStatus(execution: WorkflowExecution, result: ExecutionResult): Promise<void> {
-    execution.status = result.success ? 'completed' : 'failed';
-    execution.currentStep = result.success ? 'end' : 'failed';
+    // Check if workflow was suspended (e.g., for delays)
+    if (result.metadata?.suspendedAt) {
+      execution.status = 'delayed';
+      execution.currentStep = result.metadata.suspendedAt;
+      this.logger.log(`Workflow suspended at step: ${result.metadata.suspendedAt}`);
+    } else {
+      execution.status = result.success ? 'completed' : 'failed';
+      execution.currentStep = result.success ? 'end' : 'failed';
+    }
+
     execution.state.history.push({
       stepId: 'final',
-      state: result.success ? 'completed' : 'failed',
+      state: result.success ? (result.metadata?.suspendedAt ? 'suspended' : 'completed') : 'failed',
       timestamp: new Date(),
       result: result.result,
       error: result.error
@@ -940,7 +948,7 @@ export class WorkflowOrchestrationEngine {
     await this.executionRepository.save(execution);
   }
 
-  private async getWorkflowById(workflowId: string): Promise<WorkflowDefinition | null> {
+  async getWorkflowById(workflowId: string): Promise<WorkflowDefinition | null> {
     try {
       // Get the JsonLogic rule directly from the workflow table
       const jsonLogicRule = await this.jsonLogicRuleRepository.findOne({
@@ -968,6 +976,7 @@ export class WorkflowOrchestrationEngine {
   private convertJsonLogicToWorkflowDefinition(jsonLogicRule: any, workflowId: string, workflowUuid: string, workflowName: string) {
     // This is a simplified conversion - in a real system, you'd have a proper converter
     let steps: any[] = [];
+
 
     // Handle different JsonLogic structures
     if (jsonLogicRule.steps) {
@@ -1188,6 +1197,7 @@ export class WorkflowOrchestrationEngine {
         });
       }).flat(); // Flatten the array since we're now creating multiple steps per branch
     }
+
 
     return {
       id: workflowUuid,
